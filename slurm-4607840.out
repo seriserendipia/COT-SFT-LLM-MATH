@@ -1,0 +1,139 @@
+==========================================
+SLURM_JOB_ID = 4607840
+SLURM_JOB_NODELIST = b18-16
+TMPDIR = /tmp/SLURM_4607840
+==========================================
+
+Starting at Thu Oct 30 13:49:33 PDT 2025
+Running on hosts: b18-16
+Running on 1 nodes.
+Running on 1 processors.
+GPU allocation: 0,1
+Current working directory is /home1/yihelu/csci566
+PyTorch version: 2.8.0+cu128
+CUDA available: True
+CUDA version: 12.8
+GPU count: 2
+  GPU 0: NVIDIA L40S
+  GPU 1: NVIDIA L40S
+
+⏱️  [量化配置] 开始...
+PyTorch version: 2.8.0+cu128
+CUDA available: True
+CUDA version: 12.8
+GPU count: 2
+  GPU 0: NVIDIA L40S
+  GPU 1: NVIDIA L40S
+
+⏱️  [量化配置] 开始...
+✅ [量化配置] 完成，耗时: 0.00秒 (0.00分钟)
+
+⏱️  [数据集加载] 开始...
+✅ [量化配置] 完成，耗时: 0.00秒 (0.00分钟)
+
+⏱️  [数据集加载] 开始...
+✅ [数据集加载] 完成，耗时: 1.39秒 (0.02分钟)
+
+⏱️  [数据预处理] 开始...
+✅ [数据预处理] 完成，耗时: 0.00秒 (0.00分钟)
+
+⏱️  [模型加载] 开始...
+`torch_dtype` is deprecated! Use `dtype` instead!
+✅ [数据集加载] 完成，耗时: 1.61秒 (0.03分钟)
+
+⏱️  [数据预处理] 开始...
+✅ [数据预处理] 完成，耗时: 0.00秒 (0.00分钟)
+
+⏱️  [模型加载] 开始...
+`torch_dtype` is deprecated! Use `dtype` instead!
+✅ [模型加载] 完成，耗时: 4.66秒 (0.08分钟)
+
+⏱️  [训练器初始化] 开始...
+✅ [模型加载] 完成，耗时: 4.55秒 (0.08分钟)
+
+⏱️  [训练器初始化] 开始...
+Detected kernel version 4.18.0, which is below the recommended minimum of 5.5.0; this can cause the process to hang. It is recommended to upgrade the kernel to the minimum version or higher.
+✅ [训练器初始化] 完成，耗时: 0.24秒 (0.00分钟)
+
+================================================================================
+🚀 开始多GPU GRPO 训练...
+🎮 GPU数量: 2
+📊 配置: 10 样本 × 4 生成 = 40 次推理
+💾 总批次大小: 2 × 2 × 2 = 8
+================================================================================
+
+
+⏱️  [GRPO 完整训练] 开始...
+The tokenizer has new PAD/BOS/EOS tokens that differ from the model config and generation config. The model config and generation config were aligned accordingly, being updated with the tokenizer's values. Updated tokens: {'bos_token_id': None, 'pad_token_id': 151643}.
+✅ [训练器初始化] 完成，耗时: 0.20秒 (0.00分钟)
+
+================================================================================
+🚀 开始多GPU GRPO 训练...
+🎮 GPU数量: 2
+📊 配置: 10 样本 × 4 生成 = 40 次推理
+💾 总批次大小: 2 × 2 × 2 = 8
+================================================================================
+
+
+⏱️  [GRPO 完整训练] 开始...
+The tokenizer has new PAD/BOS/EOS tokens that differ from the model config and generation config. The model config and generation config were aligned accordingly, being updated with the tokenizer's values. Updated tokens: {'bos_token_id': None, 'pad_token_id': 151643}.
+✅ [GRPO 完整训练] 完成，耗时: 0.21秒 (0.00分钟)
+[rank1]: Traceback (most recent call last):
+[rank1]:   File "/home1/yihelu/csci566/3-5-qwen-grpo-train-multigpu.py", line 319, in <module>
+[rank1]:     trainer.train()
+[rank1]:   File "/home1/yihelu/.conda/envs/torch-env/lib/python3.12/site-packages/transformers/trainer.py", line 2328, in train
+[rank1]:     return inner_training_loop(
+[rank1]:            ^^^^^^^^^^^^^^^^^^^^
+[rank1]:   File "/home1/yihelu/.conda/envs/torch-env/lib/python3.12/site-packages/transformers/trainer.py", line 2483, in _inner_training_loop
+[rank1]:     model, self.optimizer = self.accelerator.prepare(self.model, self.optimizer)
+[rank1]:                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank1]:   File "/home1/yihelu/.conda/envs/torch-env/lib/python3.12/site-packages/accelerate/accelerator.py", line 1555, in prepare
+[rank1]:     result = tuple(
+[rank1]:              ^^^^^^
+[rank1]:   File "/home1/yihelu/.conda/envs/torch-env/lib/python3.12/site-packages/accelerate/accelerator.py", line 1556, in <genexpr>
+[rank1]:     self._prepare_one(obj, first_pass=True, device_placement=d) for obj, d in zip(args, device_placement)
+[rank1]:     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank1]:   File "/home1/yihelu/.conda/envs/torch-env/lib/python3.12/site-packages/accelerate/accelerator.py", line 1398, in _prepare_one
+[rank1]:     return self.prepare_model(obj, device_placement=device_placement)
+[rank1]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank1]:   File "/home1/yihelu/.conda/envs/torch-env/lib/python3.12/site-packages/accelerate/accelerator.py", line 1786, in prepare_model
+[rank1]:     raise ValueError(
+[rank1]: ValueError: You can't train a model that has been loaded in 8-bit or 4-bit precision on a different device than the one you're training on. Make sure you loaded the model on the correct device using for example `device_map={'':torch.cuda.current_device()}` or `device_map={'':torch.xpu.current_device()}`
+W1030 13:49:50.503000 2537357 site-packages/torch/distributed/elastic/multiprocessing/api.py:900] Sending process 2537398 closing signal SIGTERM
+E1030 13:49:50.730000 2537357 site-packages/torch/distributed/elastic/multiprocessing/api.py:874] failed (exitcode: 1) local_rank: 1 (pid: 2537399) of binary: /home1/yihelu/.conda/envs/torch-env/bin/python3.12
+Traceback (most recent call last):
+  File "/home1/yihelu/.conda/envs/torch-env/bin/accelerate", line 7, in <module>
+    sys.exit(main())
+             ^^^^^^
+  File "/home1/yihelu/.conda/envs/torch-env/lib/python3.12/site-packages/accelerate/commands/accelerate_cli.py", line 50, in main
+    args.func(args)
+  File "/home1/yihelu/.conda/envs/torch-env/lib/python3.12/site-packages/accelerate/commands/launch.py", line 1226, in launch_command
+    multi_gpu_launcher(args)
+  File "/home1/yihelu/.conda/envs/torch-env/lib/python3.12/site-packages/accelerate/commands/launch.py", line 853, in multi_gpu_launcher
+    distrib_run.run(args)
+  File "/home1/yihelu/.conda/envs/torch-env/lib/python3.12/site-packages/torch/distributed/run.py", line 892, in run
+    elastic_launch(
+  File "/home1/yihelu/.conda/envs/torch-env/lib/python3.12/site-packages/torch/distributed/launcher/api.py", line 143, in __call__
+    return launch_agent(self._config, self._entrypoint, list(args))
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home1/yihelu/.conda/envs/torch-env/lib/python3.12/site-packages/torch/distributed/launcher/api.py", line 277, in launch_agent
+    raise ChildFailedError(
+torch.distributed.elastic.multiprocessing.errors.ChildFailedError: 
+============================================================
+3-5-qwen-grpo-train-multigpu.py FAILED
+------------------------------------------------------------
+Failures:
+  <NO_OTHER_FAILURES>
+------------------------------------------------------------
+Root Cause (first observed failure):
+[0]:
+  time      : 2025-10-30_13:49:50
+  host      : b18-16.hpc.usc.edu
+  rank      : 1 (local_rank: 1)
+  exitcode  : 1 (pid: 2537399)
+  error_file: <N/A>
+  traceback : To enable traceback see: https://pytorch.org/docs/stable/elastic/errors.html
+============================================================
+
+Program finished with exit code 0 at: Thu Oct 30 13:49:51 PDT 2025
+
