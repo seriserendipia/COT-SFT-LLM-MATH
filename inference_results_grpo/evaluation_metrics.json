@@ -1,0 +1,17 @@
+{
+  "total_samples": 395,
+  "correct_predictions": 217,
+  "wrong_predictions": 178,
+  "accuracy": 0.549367088607595,
+  "model_type": "GRPO",
+  "model_path": "qwen_grpo_lora_multigpu/checkpoint-462",
+  "base_model": "Qwen/Qwen2.5-Coder-1.5B",
+  "dataset": "Kanan275/GSM8k-CoT",
+  "split": "train[924:934]",
+  "generation_config": {
+    "max_new_tokens": 512,
+    "temperature": 0.0,
+    "do_sample": false,
+    "method": "greedy_decoding"
+  }
+}

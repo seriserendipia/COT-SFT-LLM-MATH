@@ -1,0 +1,47 @@
+[
+  {
+    "index": 1,
+    "question": "Weng earns $12 an hour for babysitting. Yesterday, she just did 50 minutes of babysitting. How much did she earn?",
+    "ground_truth": "Final Answer: $10",
+    "ground_truth_extracted": "10",
+    "generated_response": "To find out how much Weng earned, you need to multiply her hourly rate by the number of hours she worked. In this case, Weng worked for 50 minutes. Since there are 60 minutes in an hour, you can convert the 50 minutes to hours by dividing 50 by 60: 50 / 60 = 0.8333 hours. Now you can multiply 0.8333 hours by Weng's hourly rate of $12 to find out how much she earned: 0.8333 * $12 = $10.0004. So, Weng earned $10.0004 in 50 minutes.",
+    "predicted_answer": "50",
+    "is_correct": false
+  },
+  {
+    "index": 2,
+    "question": "Betty is saving money for a new wallet which costs $100. Betty has only half of the money she needs. Her parents decided to give her $15 for that purpose, and her grandparents twice as much as her parents. How much more money does Betty need to buy the wallet?",
+    "ground_truth": "Final Answer: Betty needs $5 more to buy the wallet.",
+    "ground_truth_extracted": "5",
+    "generated_response": "Betty needs $100 - $50 = $50 to buy the wallet. Her parents gave her $15 and her grandparents gave her $15 x 2 = $30. So, Betty needs $50 - $35 = $15 more.",
+    "predicted_answer": "15",
+    "is_correct": false
+  },
+  {
+    "index": 6,
+    "question": "Albert is wondering how much pizza he can eat in one day. He buys 2 large pizzas and 2 small pizzas. A large pizza has 16 slices and a small pizza has 8 slices. If he eats it all, how many pieces does he eat that day?",
+    "ground_truth": "Final Answer: 48 pieces.",
+    "ground_truth_extracted": "48",
+    "generated_response": "2 * 16 + 2 * 8 = 40 + 16 = 56",
+    "predicted_answer": "56",
+    "is_correct": false
+  },
+  {
+    "index": 8,
+    "question": "Alexis is applying for a new job and bought a new set of business clothes to wear to the interview. She went to a department store with a budget of $200 and spent $30 on a button-up shirt, $46 on suit pants, $38 on a suit coat, $11 on socks, and $18 on a belt. She also purchased a pair of shoes, but lost the receipt for them. She has $16 left from her budget. How much did Alexis pay for the shoes?",
+    "ground_truth": "Final Answer: Alexis paid $41 for the shoes.",
+    "ground_truth_extracted": "41",
+    "generated_response": "To find out how much Alexis paid for the shoes, you can follow these steps:\n\n1. Calculate the total amount spent on items other than the shoes:\n   $30 (button-up shirt) + $46 (suit pants) + $38 (suit coat) + $11 (socks) + $18 (belt) = $153\n\n2. Determine the total amount Alexis spent on the interview:\n   $200 (budget) - $16 (leftover) = $184\n\n3. Subtract the amount spent on items other than the shoes from the total amount spent on the interview:\n   $184 - $153 = $31\n\n4. The amount paid for the shoes is $31.",
+    "predicted_answer": "31.",
+    "is_correct": false
+  },
+  {
+    "index": 9,
+    "question": "Tina makes $18.00 an hour.  If she works more than 8 hours per shift, she is eligible for overtime, which is paid by your hourly wage + 1/2 your hourly wage.  If she works 10 hours every day for 5 days, how much money does she make?",
+    "ground_truth": "Final Answer: Tina makes \\$990.00 in 5 days.",
+    "ground_truth_extracted": "5",
+    "generated_response": "Tina's hourly wage is $18.00.\nIf she works 10 hours every day, she makes 10 * $18.00 = $180.00 per day.\nShe works 5 days, so she makes 5 * $180.00 = $900.00 per week.\nIf she works more than 8 hours per shift, she is eligible for overtime, which is paid by her hourly wage + 1/2 her hourly wage.\nHer hourly wage + 1/2 her hourly wage = $18.00 + 1/2 * $18.00 = $18.00 + $9.00 = $27.00 per hour.\nIf she works 10 hours every day, she makes 10 * $27.00 = $270.00 per day.\nShe works 5 days, so she makes 5 * $270.00 = $1350.00 per week.\nTherefore, Tina makes $1350.00 per week.",
+    "predicted_answer": "1350.00",
+    "is_correct": false
+  }
+]

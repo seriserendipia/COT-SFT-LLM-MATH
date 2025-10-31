@@ -1,0 +1,8 @@
+{
+  "total_samples": 10,
+  "correct_predictions": 5,
+  "accuracy": 0.5,
+  "model_path": "qwen_peft_sft_lora/checkpoint-50",
+  "dataset": "Kanan275/GSM8k-CoT",
+  "split": "train[200:400]"
+}

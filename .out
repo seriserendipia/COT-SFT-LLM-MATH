@@ -1,0 +1,68 @@
+==========================================
+SLURM_JOB_ID = 4580344
+SLURM_JOB_NODELIST = a03-02
+TMPDIR = /tmp/SLURM_4580344
+==========================================
+
+Starting at Mon Oct 27 18:11:10 PDT 2025
+Running on hosts: a03-02
+Running on 1 nodes.
+Running on 1 processors.
+Current working directory is /home1/yihelu/csci566
+Map:   0%|          | 0/10 [00:00<?, ? examples/s]Map:   0%|          | 0/10 [00:00<?, ? examples/s]
+Traceback (most recent call last):
+  File "/home1/yihelu/csci566/1-qwen-cot-sft.py", line 24, in <module>
+    ds = ds.map(to_chat)
+         ^^^^^^^^^^^^^^^
+  File "/home1/yihelu/.conda/envs/torch-env/lib/python3.12/site-packages/datasets/arrow_dataset.py", line 562, in wrapper
+    out: Union["Dataset", "DatasetDict"] = func(self, *args, **kwargs)
+                                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home1/yihelu/.conda/envs/torch-env/lib/python3.12/site-packages/datasets/arrow_dataset.py", line 3324, in map
+    for rank, done, content in Dataset._map_single(**unprocessed_kwargs):
+  File "/home1/yihelu/.conda/envs/torch-env/lib/python3.12/site-packages/datasets/arrow_dataset.py", line 3656, in _map_single
+    for i, example in iter_outputs(shard_iterable):
+  File "/home1/yihelu/.conda/envs/torch-env/lib/python3.12/site-packages/datasets/arrow_dataset.py", line 3630, in iter_outputs
+    yield i, apply_function(example, i, offset=offset)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home1/yihelu/.conda/envs/torch-env/lib/python3.12/site-packages/datasets/arrow_dataset.py", line 3553, in apply_function
+    processed_inputs = function(*fn_args, *additional_args, **fn_kwargs)
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home1/yihelu/csci566/1-qwen-cot-sft.py", line 20, in to_chat
+    think, ans = e["answer"].split("####")
+                 ~^^^^^^^^^^
+  File "/home1/yihelu/.conda/envs/torch-env/lib/python3.12/site-packages/datasets/formatting/formatting.py", line 283, in __getitem__
+    value = self.data[key]
+            ~~~~~~~~~^^^^^
+KeyError: 'answer'
+Loading dataset...
+Dataset fields: ['index', 'instruction', 'step_list', 'final_answer', 'confidence', 'answer_type']
+First example keys: dict_keys(['index', 'instruction', 'step_list', 'final_answer', 'confidence', 'answer_type'])
+First example: {'index': 0, 'instruction': 'Natalia sold clips to 48 of her friends in April, and then she sold half as many clips in May. How many clips did Natalia sell altogether in April and May?', 'step_list': '["Sure, let\'s break this down step by step:", \'1. **April Sales**: Natalia sold clips to 48 friends in April.\', \'2. **May Sales**: In May, she sold half as many clips as she did in April. So, we need to calculate half of 48:\', \'   \\\\[\', \'   \\\\frac{48}{2} = 24\', \'   \\\\]\', \'   Therefore, Natalia sold 24 clips in May.\', \'3. **Total Sales**: To find out how many clips Natalia sold altogether in April and May, we add the number of clips sold in April to the number of clips sold in May:\', \'   \\\\[\', \'   48 + 24 = 72\', \'   \\\\]\', \'Final Answer: Natalia sold a total of 72 clips in April and May.\']', 'final_answer': "['Final Answer: Natalia sold a total of 72 clips in April and May.']", 'confidence': 0.5194, 'answer_type': 'positive'}
+Map:   0%|          | 0/10 [00:00<?, ? examples/s]Map:   0%|          | 0/10 [00:00<?, ? examples/s]
+Traceback (most recent call last):
+  File "/home1/yihelu/csci566/2-qwen-cot-inference.py", line 40, in <module>
+    ds = ds.map(to_chat)
+         ^^^^^^^^^^^^^^^
+  File "/home1/yihelu/.conda/envs/torch-env/lib/python3.12/site-packages/datasets/arrow_dataset.py", line 562, in wrapper
+    out: Union["Dataset", "DatasetDict"] = func(self, *args, **kwargs)
+                                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home1/yihelu/.conda/envs/torch-env/lib/python3.12/site-packages/datasets/arrow_dataset.py", line 3324, in map
+    for rank, done, content in Dataset._map_single(**unprocessed_kwargs):
+  File "/home1/yihelu/.conda/envs/torch-env/lib/python3.12/site-packages/datasets/arrow_dataset.py", line 3656, in _map_single
+    for i, example in iter_outputs(shard_iterable):
+  File "/home1/yihelu/.conda/envs/torch-env/lib/python3.12/site-packages/datasets/arrow_dataset.py", line 3630, in iter_outputs
+    yield i, apply_function(example, i, offset=offset)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home1/yihelu/.conda/envs/torch-env/lib/python3.12/site-packages/datasets/arrow_dataset.py", line 3553, in apply_function
+    processed_inputs = function(*fn_args, *additional_args, **fn_kwargs)
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home1/yihelu/csci566/2-qwen-cot-inference.py", line 31, in to_chat
+    think, ans = e["answer"].split("####")
+                 ~^^^^^^^^^^
+  File "/home1/yihelu/.conda/envs/torch-env/lib/python3.12/site-packages/datasets/formatting/formatting.py", line 283, in __getitem__
+    value = self.data[key]
+            ~~~~~~~~~^^^^^
+KeyError: 'answer'
+
+Program finished with exit code 0 at: Mon Oct 27 18:11:25 PDT 2025
+

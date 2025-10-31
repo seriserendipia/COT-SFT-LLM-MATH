@@ -1,0 +1,81 @@
+==========================================
+SLURM_JOB_ID = 4608088
+SLURM_JOB_NODELIST = a02-06
+TMPDIR = /tmp/SLURM_4608088
+==========================================
+
+Starting at Thu Oct 30 14:25:16 PDT 2025
+Running on hosts: a02-06
+Running on 1 nodes.
+Running on 1 processors.
+Current working directory is /home1/yihelu/csci566
+PyTorch version: 2.8.0+cu128
+CUDA available: False
+WARNING: CUDA not available, will use CPU (very slow!)
+
+⏱️  [量化配置] 开始...
+✅ [量化配置] 完成，耗时: 0.00秒 (0.00分钟)
+
+⏱️  [数据集加载] 开始...
+✅ [数据集加载] 完成，耗时: 1.51秒 (0.03分钟)
+
+⏱️  [数据预处理] 开始...
+Map:   0%|          | 0/923 [00:00<?, ? examples/s]Map:  78%|███████▊  | 719/923 [00:00<00:00, 7138.88 examples/s]Map: 100%|██████████| 923/923 [00:00<00:00, 5848.82 examples/s]
+`torch_dtype` is deprecated! Use `dtype` instead!
+Detected kernel version 4.18.0, which is below the recommended minimum of 5.5.0; this can cause the process to hang. It is recommended to upgrade the kernel to the minimum version or higher.
+The tokenizer has new PAD/BOS/EOS tokens that differ from the model config and generation config. The model config and generation config were aligned accordingly, being updated with the tokenizer's values. Updated tokens: {'bos_token_id': None, 'pad_token_id': 151643}.
+✅ [数据预处理] 完成，耗时: 0.17秒 (0.00分钟)
+
+⏱️  [模型加载] 开始...
+✅ [模型加载] 完成，耗时: 22.10秒 (0.37分钟)
+
+⏱️  [训练器初始化] 开始...
+✅ [训练器初始化] 完成，耗时: 0.27秒 (0.00分钟)
+
+================================================================================
+🚀 开始 GRPO 训练...
+📊 配置: 923 样本 × 4 生成 = 3692 次推理
+💾 批次大小: 2 × 4 = 8 (有效)
+================================================================================
+
+
+⏱️  [GRPO 完整训练] 开始...
+  0%|          | 0/462 [00:00<?, ?it/s]/home1/yihelu/.conda/envs/torch-env/lib/python3.12/site-packages/torch/utils/data/dataloader.py:666: UserWarning: 'pin_memory' argument is set as true but no accelerator is found, then device pinned memory won't be used.
+  warnings.warn(warn_msg)
+✅ [GRPO 完整训练] 完成，耗时: 14571.64秒 (242.86分钟)
+Traceback (most recent call last):
+  File "/home1/yihelu/csci566/3-qwen-grpo-train.py", line 301, in <module>
+    trainer.train()
+  File "/home1/yihelu/.conda/envs/torch-env/lib/python3.12/site-packages/transformers/trainer.py", line 2328, in train
+    return inner_training_loop(
+           ^^^^^^^^^^^^^^^^^^^^
+  File "/home1/yihelu/.conda/envs/torch-env/lib/python3.12/site-packages/transformers/trainer.py", line 2738, in _inner_training_loop
+    self.optimizer.step()
+  File "/home1/yihelu/.conda/envs/torch-env/lib/python3.12/site-packages/accelerate/optimizer.py", line 179, in step
+    self.optimizer.step(closure)
+  File "/home1/yihelu/.conda/envs/torch-env/lib/python3.12/site-packages/torch/optim/lr_scheduler.py", line 133, in wrapper
+    return func.__get__(opt, opt.__class__)(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home1/yihelu/.conda/envs/torch-env/lib/python3.12/site-packages/torch/optim/optimizer.py", line 516, in wrapper
+    out = func(*args, **kwargs)
+          ^^^^^^^^^^^^^^^^^^^^^
+  File "/home1/yihelu/.conda/envs/torch-env/lib/python3.12/site-packages/torch/utils/_contextlib.py", line 120, in decorate_context
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/home1/yihelu/.conda/envs/torch-env/lib/python3.12/site-packages/bitsandbytes/optim/optimizer.py", line 291, in step
+    self.update_step(group, p, gindex, pindex)
+  File "/home1/yihelu/.conda/envs/torch-env/lib/python3.12/site-packages/torch/utils/_contextlib.py", line 120, in decorate_context
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/home1/yihelu/.conda/envs/torch-env/lib/python3.12/site-packages/bitsandbytes/optim/optimizer.py", line 568, in update_step
+    F.optimizer_update_8bit_blockwise(
+  File "/home1/yihelu/.conda/envs/torch-env/lib/python3.12/site-packages/bitsandbytes/functional.py", line 1359, in optimizer_update_8bit_blockwise
+    is_on_gpu([p, g, state1, state2, qmap1, qmap2, absmax1, absmax2])
+  File "/home1/yihelu/.conda/envs/torch-env/lib/python3.12/site-packages/bitsandbytes/functional.py", line 360, in is_on_gpu
+    raise RuntimeError(
+RuntimeError: All input tensors need to be on the same GPU, but found some tensors to not be on a GPU:
+ [(torch.Size([16, 1536]), device(type='cpu')), (torch.Size([16, 1536]), device(type='cpu')), (torch.Size([16, 1536]), device(type='cpu')), (torch.Size([16, 1536]), device(type='cpu')), (torch.Size([256]), device(type='cpu')), (torch.Size([256]), device(type='cpu')), (torch.Size([96]), device(type='cpu')), (torch.Size([96]), device(type='cpu'))]
+  0%|          | 0/462 [4:02:55<?, ?it/s]
+
+Program finished with exit code 0 at: Thu Oct 30 18:28:43 PDT 2025
+
