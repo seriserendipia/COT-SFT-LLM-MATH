@@ -25,37 +25,25 @@
 #   ⚠️ p100 (CUDA 6.0) 不兼容 PyTorch 2.8+
 # ============================================================================
 
-# 当前配置：100样本 小规模训练（接受任意可用GPU）
-#SBATCH --cpus-per-task=8
-#SBATCH --mem=32G
-#SBATCH --time=00:30:00
-#SBATCH --gpus-per-task=1
 
-# 如需更改配置，取消下方注释并注释掉上方配置：
-
-## 10样本 快速测试配置
-##SBATCH --cpus-per-task=4
-##SBATCH --mem=16G
-##SBATCH --time=00:15:00
-##SBATCH --gpus-per-task=1
-
-## 1000样本 中等规模配置
-##SBATCH --cpus-per-task=8
-##SBATCH --mem=32G
-##SBATCH --time=02:00:00
-##SBATCH --gpus-per-task=1
 
 ## 全数据集 完整训练配置
-##SBATCH --cpus-per-task=16
-##SBATCH --mem=48G
-##SBATCH --time=08:00:00
-##SBATCH --gpus-per-task=1
+#SBATCH --cpus-per-task=16
+#SBATCH --mem=48G
+#SBATCH --time=08:00:00
+#SBATCH --gpus-per-task=1
+
+# ============================================================================
+# 邮件通知配置
+# ============================================================================
+#SBATCH --mail-user=yihelu@usc.edu
+#SBATCH --mail-type=END,FAIL
 
 # ============================================================================
 # 如果排队太久或需要特定GPU，可取消以下注释指定GPU型号：
 # #SBATCH --gpus-per-task=a40:1     # 推荐：性能强，资源相对充足
 # #SBATCH --gpus-per-task=v100:1    # 备选：性能够用，资源充足
-# #SBATCH --gpus-per-task=a100:1    # 高性能但排队长
+# SBATCH --gpus-per-task=a100:1    # 高性能但排队长
 # #SBATCH --gpus-per-task=l40s:1    # 最强但排队最长
 # ============================================================================
 

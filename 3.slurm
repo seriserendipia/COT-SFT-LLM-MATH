@@ -28,22 +28,20 @@
 
 
 
-# ============================================================================
+
+# 全数据集 完整训练配置
 #SBATCH --cpus-per-task=16
 #SBATCH --mem=48G
-#SBATCH --time=12:30:00
-#SBATCH --gpus-per-task=1
+#SBATCH --time=12:05:00
+##SBATCH --gpus-per-task=1
 
 # ============================================================================
-# 邮件通知配置
+# 如果排队太久或需要特定GPU，可取消以下注释指定GPU型号：
+# #SBATCH --gpus-per-task=a40:1     # 推荐：性能强，资源相对充足
+# #SBATCH --gpus-per-task=v100:1    # 备选：性能够用，资源充足
+# SBATCH --gpus-per-task=a100:1    # 高性能但排队长
+# #SBATCH --gpus-per-task=l40s:1    # 最强但排队最长
 # ============================================================================
-#SBATCH --mail-user=yihelu@usc.edu
-#SBATCH --mail-type=END,FAIL
-
-# ============================================================================
-# 如果排队太久，可取消以下注释指定特定GPU型号：
-# #SBATCH --gpus-per-task=v100:1    # 推荐：性能够用，资源充足
-# #SBATCH --gpus-per-task=a40:1 
 
 echo ""
 echo "Starting at `date`"
@@ -64,7 +62,7 @@ source /apps/conda/miniforge3/24.3.0/etc/profile.d/conda.sh
 
 conda activate torch-env
 
-python 1-qwen-cot-sft.py
+python 3-qwen-grpo-train.py
 
 # Run Jupyter Notebook with papermill
 # papermill HW2_microsoft_malware_prediction__yihelu.ipynb output_notebook.ipynb

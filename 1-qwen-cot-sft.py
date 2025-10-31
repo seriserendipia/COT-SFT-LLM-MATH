@@ -37,7 +37,7 @@ bnb_config = BitsAndBytesConfig(
 )
 
 # 2. 准备数据 - 使用 step_list 作为 CoT 推理过程
-ds = load_dataset("Kanan275/GSM8k-CoT", "default", split="train[:10]")
+ds = load_dataset("Kanan275/GSM8k-CoT", "default", split="train[:923]")
 
 def to_chat(e):
     """
