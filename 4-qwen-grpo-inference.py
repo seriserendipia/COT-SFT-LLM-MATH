@@ -1,4 +1,5 @@
 # mamba activate torch-env
+# GRPO 模型推理和评估脚本
 
 from datasets import load_dataset
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
@@ -38,8 +39,11 @@ bnb_config = BitsAndBytesConfig(
     bnb_4bit_use_double_quant=True,
 )
 
-# 2. 加载数据集
+# 2. 加载数据集（测试集：train[924:1319]）
 print("Loading dataset...")
+# 先用前10条测试
+# ds = load_dataset("Kanan275/GSM8k-CoT", "default", split="train[924:934]")
+# 完整测试集（取消注释下面一行）：
 ds = load_dataset("Kanan275/GSM8k-CoT", "default", split="train[924:1319]")
 
 def to_chat(e):
@@ -117,12 +121,12 @@ base_model = AutoModelForCausalLM.from_pretrained(
     trust_remote_code=True,
 )
 
-# 4. 加载LoRA权重
-print("Loading LoRA adapter...")
+# 4. 加载GRPO训练的LoRA权重
+print("Loading GRPO LoRA adapter...")
 
 # 自动查找最新的 checkpoint
 import glob
-base_lora_dir = "qwen_peft_sft_lora"
+base_lora_dir = "qwen_grpo_lora_multigpu"
 
 # 查找所有 checkpoint-* 目录
 checkpoint_dirs = glob.glob(os.path.join(base_lora_dir, "checkpoint-*"))
@@ -145,8 +149,8 @@ if not os.path.exists(lora_path):
     print(f"   Current working directory: {os.getcwd()}")
     print(f"\n   Possible solutions:")
     print(f"   1. Run this script from the same directory where training was done")
-    print(f"   2. Use absolute path: lora_path = '/home1/yihelu/csci566/qwen_peft_sft_lora'")
-    print(f"   3. Run check_model_files.py to diagnose the issue")
+    print(f"   2. Check if GRPO training completed successfully")
+    print(f"   3. Use absolute path if needed")
     print("="*70)
     import sys
     sys.exit(1)
@@ -157,12 +161,12 @@ if not os.path.exists(adapter_config):
     print(f"\n{'='*70}")
     print(f"❌ ERROR: adapter_config.json not found in {lora_path}")
     print(f"   This file is required to load the LoRA adapter.")
-    print(f"   Training may not have completed successfully.")
+    print(f"   GRPO training may not have completed successfully.")
     print("="*70)
     import sys
     sys.exit(1)
 
-print(f"✅ Found LoRA adapter at: {os.path.abspath(lora_path)}")
+print(f"✅ Found GRPO LoRA adapter at: {os.path.abspath(lora_path)}")
 
 model = PeftModel.from_pretrained(base_model, lora_path)
 model.eval()
@@ -187,7 +191,14 @@ def extract_answer(text):
     return answer
 
 def generate_answer(question, max_length=2048):
-    """生成答案"""
+    """
+    生成答案（使用确定性解码）
+    
+    生成参数说明：
+    - temperature=0.0: 使用贪心解码（选择概率最高的token）
+    - do_sample=False: 关闭随机采样
+    - 这样可以保证每次运行结果一致，便于评估和对比
+    """
     prompt = f"用户: {question}\n助手:"
     
     inputs = tok(prompt, return_tensors="pt", truncation=True, max_length=max_length)
@@ -197,9 +208,8 @@ def generate_answer(question, max_length=2048):
         outputs = model.generate(
             **inputs,
             max_new_tokens=512,
-            temperature=0.7,
-            top_p=0.9,
-            do_sample=True,
+            temperature=0.0,           # ✅ 确定性生成（贪心解码）
+            do_sample=False,           # ✅ 关闭采样
             pad_token_id=tok.eos_token_id,
         )
     
@@ -209,12 +219,18 @@ def generate_answer(question, max_length=2048):
     return response
 
 # 7. 批量推理
-print("Starting inference...")
+print("\n" + "="*70)
+print("🚀 Starting GRPO model inference...")
+print(f"📊 Test samples: {len(ds)}")
+print(f"🎯 Evaluation metric: Accuracy")
+print(f"🔧 Generation mode: Deterministic (temperature=0.0)")
+print("="*70 + "\n")
+
 results = []
 correct = 0
 total = 0
 
-for i, example in enumerate(tqdm(ds)):
+for i, example in enumerate(tqdm(ds, desc="Evaluating")):
     question = example["question"]
     ground_truth = example["ground_truth"]
     
@@ -241,51 +257,88 @@ for i, example in enumerate(tqdm(ds)):
     }
     results.append(result)
     
-    # 每50个样本打印一次进度
-    if (i + 1) % 50 == 0:
+    # 每5个样本打印一次进度（测试集较小）
+    if (i + 1) % 5 == 0:
         acc = correct / total
-        print(f"\nProgress: {i+1}/{len(ds)}, Accuracy so far: {acc:.4f}")
+        print(f"\nProgress: {i+1}/{len(ds)}, Accuracy so far: {acc:.4f} ({acc*100:.2f}%)")
 
 # 8. 计算评估指标
 accuracy = correct / total
-print(f"\n{'='*50}")
-print(f"Final Evaluation Results:")
+print(f"\n{'='*70}")
+print(f"📈 Final Evaluation Results (GRPO Model):")
+print(f"{'='*70}")
 print(f"Total samples: {total}")
 print(f"Correct predictions: {correct}")
+print(f"Wrong predictions: {total - correct}")
 print(f"Accuracy: {accuracy:.4f} ({accuracy*100:.2f}%)")
-print(f"{'='*50}\n")
+print(f"{'='*70}\n")
 
 # 9. 保存结果
-output_dir = "inference_results_sft"  # 明确标注是 SFT 模型的推理结果
+output_dir = "inference_results_grpo"  # GRPO 模型的推理结果
 os.makedirs(output_dir, exist_ok=True)
 
 # 保存详细推理结果
 results_file = os.path.join(output_dir, "inference_results.json")
 with open(results_file, "w", encoding="utf-8") as f:
     json.dump(results, f, ensure_ascii=False, indent=2)
-print(f"Inference results saved to: {results_file}")
+print(f"✅ Inference results saved to: {results_file}")
 
 # 保存评估指标
 metrics = {
     "total_samples": total,
     "correct_predictions": correct,
+    "wrong_predictions": total - correct,
     "accuracy": accuracy,
+    "model_type": "GRPO",
     "model_path": lora_path,
+    "base_model": model_id,
     "dataset": "Kanan275/GSM8k-CoT",
-    "split": "train[200:400]",
+    "split": "train[924:934]",  # 更新为实际使用的split
+    "generation_config": {
+        "max_new_tokens": 512,
+        "temperature": 0.0,
+        "do_sample": False,
+        "method": "greedy_decoding"
+    }
 }
 
 metrics_file = os.path.join(output_dir, "evaluation_metrics.json")
 with open(metrics_file, "w", encoding="utf-8") as f:
     json.dump(metrics, f, ensure_ascii=False, indent=2)
-print(f"Evaluation metrics saved to: {metrics_file}")
+print(f"✅ Evaluation metrics saved to: {metrics_file}")
 
 # 10. 保存错误案例分析
 wrong_cases = [r for r in results if not r["is_correct"]]
 wrong_cases_file = os.path.join(output_dir, "wrong_cases.json")
 with open(wrong_cases_file, "w", encoding="utf-8") as f:
     json.dump(wrong_cases, f, ensure_ascii=False, indent=2)
-print(f"Wrong cases saved to: {wrong_cases_file}")
-print(f"\nTotal wrong cases: {len(wrong_cases)}")
+print(f"✅ Wrong cases saved to: {wrong_cases_file}")
+print(f"   Total wrong cases: {len(wrong_cases)}")
 
-print("\nInference and evaluation completed!")
+# 11. 打印一些示例结果
+if len(results) > 0:
+    print(f"\n{'='*70}")
+    print("📝 Sample Results:")
+    print(f"{'='*70}")
+    
+    # 打印第一个正确的案例
+    correct_cases = [r for r in results if r["is_correct"]]
+    if correct_cases:
+        sample = correct_cases[0]
+        print(f"\n✅ Correct Example (Index {sample['index']}):")
+        print(f"Question: {sample['question'][:100]}...")
+        print(f"Predicted: {sample['predicted_answer']}")
+        print(f"Ground Truth: {sample['ground_truth_extracted']}")
+    
+    # 打印第一个错误的案例
+    if wrong_cases:
+        sample = wrong_cases[0]
+        print(f"\n❌ Wrong Example (Index {sample['index']}):")
+        print(f"Question: {sample['question'][:100]}...")
+        print(f"Predicted: {sample['predicted_answer']}")
+        print(f"Ground Truth: {sample['ground_truth_extracted']}")
+        print(f"Full Response: {sample['generated_response'][:200]}...")
+
+print(f"\n{'='*70}")
+print("🎉 GRPO Model Inference and Evaluation Completed!")
+print(f"{'='*70}")

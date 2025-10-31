@@ -1,0 +1,37 @@
+# Accelerate 配置文件：2-GPU DDP 训练（适用于 4-bit 量化）
+# 使用方法：accelerate launch --config_file accelerate_config_2gpu.yaml 3-5-qwen-grpo-train-multigpu.py
+
+compute_environment: LOCAL_MACHINE
+debug: false
+distributed_type: MULTI_GPU  # 使用 DDP (DistributedDataParallel)
+downcast_bf16: 'no'
+enable_cpu_affinity: false
+machine_rank: 0
+main_training_function: main
+mixed_precision: fp16  # 与代码中的 fp16=True 一致
+num_machines: 1
+num_processes: 2  # 2个GPU进程
+rdzv_backend: static
+same_network: true
+tpu_env: []
+tpu_use_cluster: false
+tpu_use_sudo: false
+use_cpu: false
+
+# ============================================================================
+# 配置说明：
+# 1. distributed_type: MULTI_GPU = PyTorch DDP
+#    - 每个GPU运行一个独立进程
+#    - 每个进程有自己的模型副本
+#    - 梯度在backward后自动同步
+# 
+# 2. 4-bit量化 + DDP 的特殊要求：
+#    - 模型必须在加载时就绑定到正确的设备
+#    - 使用 device_map={'': LOCAL_RANK} 而不是 device_map='auto'
+#    - LOCAL_RANK 由 accelerate 自动设置为 0, 1, 2, ...
+# 
+# 3. 与 FSDP/DeepSpeed 的区别：
+#    - DDP: 每个GPU有完整模型副本（适合小模型 < 7B）
+#    - FSDP: 模型参数分片到多个GPU（适合大模型 > 7B）
+#    - DeepSpeed ZeRO: 更激进的显存优化（适合超大模型 > 70B）
+# ============================================================================

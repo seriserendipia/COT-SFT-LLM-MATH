@@ -1,27 +1,4 @@
 # mamba activate torch-env
-# 多GPU GRPO训练版本（使用 accelerate）
-# 
-# ============================================================================
-# 重要：4-bit 量化 + 多GPU DDP 训练的正确启动方式
-# ============================================================================
-# 
-# ❌ 错误方式（会导致 device mismatch 错误）：
-#    python 3-5-qwen-grpo-train-multigpu.py
-# 
-# ✅ 正确方式1（推荐，使用配置文件）：
-#    accelerate launch --config_file accelerate_config_2gpu.yaml 3-5-qwen-grpo-train-multigpu.py
-# 
-# ✅ 正确方式2（命令行指定参数）：
-#    accelerate launch --multi_gpu --num_processes=2 3-5-qwen-grpo-train-multigpu.py
-# 
-# ⚠️ 为什么需要 LOCAL_RANK：
-# - accelerate launch 会为每个GPU启动一个独立的Python进程
-# - 进程0: LOCAL_RANK=0 → 使用 GPU 0
-# - 进程1: LOCAL_RANK=1 → 使用 GPU 1
-# - 4-bit量化的模型必须在加载时就绑定到正确的设备
-# - device_map={'': LOCAL_RANK} 确保每个进程的模型加载到对应的GPU
-# 
-# ============================================================================
 
 from datasets import load_dataset
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
@@ -29,7 +6,6 @@ from peft import LoraConfig
 from trl import GRPOTrainer, GRPOConfig
 import torch
 import time
-import os
 
 # ============================================================================
 # 性能分析工具
@@ -51,31 +27,29 @@ print(f"PyTorch version: {torch.__version__}")
 print(f"CUDA available: {torch.cuda.is_available()}")
 if torch.cuda.is_available():
     print(f"CUDA version: {torch.version.cuda}")
-    gpu_count = torch.cuda.device_count()
-    print(f"GPU count: {gpu_count}")
-    for i in range(gpu_count):
-        print(f"  GPU {i}: {torch.cuda.get_device_name(i)}")
+    print(f"GPU count: {torch.cuda.device_count()}")
+    gpu_name = torch.cuda.get_device_name(0)
+    print(f"GPU name: {gpu_name}")
+    print(f"Current device: {torch.cuda.current_device()}")
     
-    # 检查是否有不兼容的 P100
-    for i in range(gpu_count):
-        gpu_name = torch.cuda.get_device_name(i)
-        if "P100" in gpu_name:
-            print("\n" + "="*70)
-            print(f"❌ ERROR: GPU {i} is P100 (CUDA 6.0), not compatible with PyTorch 2.8+")
-            print("   Minimum requirement: CUDA capability 7.0 (V100 or newer)")
-            print("   Please resubmit the job to get different GPUs.")
-            print("="*70)
-            import sys
-            sys.exit(1)
+    # 检查是否是不兼容的 P100
+    if "P100" in gpu_name:
+        print("\n" + "="*70)
+        print("❌ ERROR: P100 GPU (CUDA 6.0) is not compatible with PyTorch 2.8+")
+        print("   Minimum requirement: CUDA capability 7.0 (V100 or newer)")
+        print("   Please resubmit the job to get a different GPU.")
+        print("="*70)
+        import sys
+        sys.exit(1)
 else:
     print("WARNING: CUDA not available, will use CPU (very slow!)")
 
 # 1. 配置 4-bit 量化参数
 with Timer("量化配置"):
     bnb_config = BitsAndBytesConfig(
-        load_in_4bit=True,
-        bnb_4bit_quant_type="nf4",  # 使用 NF4 量化
-        bnb_4bit_compute_dtype=torch.float16,  # 使用 float16（与 fp16 训练一致）
+    load_in_4bit=True,
+    bnb_4bit_quant_type="nf4",  # 使用 NF4 量化
+    bnb_4bit_compute_dtype=torch.float16,  # 使用 float16（与 fp16 训练一致）
         bnb_4bit_use_double_quant=True,
     )
 
@@ -147,16 +121,10 @@ with Timer("数据预处理"):
 model_id = "Qwen/Qwen2.5-Coder-1.5B"
 
 with Timer("模型加载"):
-    # ⚠️ 4-bit量化 + 多GPU训练的特殊要求（TRL文档）:
-    # 方案1：使用 device_map={'': int(os.environ.get("LOCAL_RANK", 0))}
-    # 方案2：不使用 device_map，让 accelerate.prepare() 自动处理设备分配
-    # 这里使用方案1，确保每个进程的模型加载到正确的GPU上
-    local_rank = int(os.environ.get("LOCAL_RANK", "0"))
-    
     model = AutoModelForCausalLM.from_pretrained(
-        model_id,
-        quantization_config=bnb_config,
-        device_map={'': local_rank},  # ✅ 使用 LOCAL_RANK 环境变量
+    model_id,
+    quantization_config=bnb_config,
+    device_map="auto",
         torch_dtype=torch.float16,  # 与量化和训练精度保持一致
     )
     tok = AutoTokenizer.from_pretrained(model_id)
@@ -169,7 +137,7 @@ lora_config = LoraConfig(
     r=16, # R值
     lora_alpha=32, # Alpha值（通常是r的2倍）
     # ✅ TRL推荐：target_modules="all-linear" 性能更好
-    # 但对于小模型和测试，保持具体模块可减少参数
+    # 但对于小模型和测试，包含主要线性层即可
     target_modules=["q_proj", "k_proj", "v_proj", "o_proj", 
                     "gate_proj", "up_proj", "down_proj"],  # 包含MLP层
     lora_dropout=0.05,
@@ -177,84 +145,64 @@ lora_config = LoraConfig(
     task_type="CAUSAL_LM",
 )
 
-# 5. 定义 GRPO 训练参数（基于TRL最佳实践优化）
+# 5. 定义 GRPO 训练参数（基于 TRL 最佳实践优化）
 training_args = GRPOConfig(
-    output_dir="qwen_grpo_lora_multigpu",
+    output_dir="qwen_grpo_lora",
     num_train_epochs=1,
     
     # ============================================================================
-    # 批次配置（多GPU下每张卡的批次）
+    # 批次配置（利用 A100 80GB 的充足显存）
     # ============================================================================
-    per_device_train_batch_size=2,  # 每个GPU的批次大小
-    gradient_accumulation_steps=2,   # 减少累积步数（因为多GPU总批次已增大）
-    # 如果有2个GPU：总批次 = 2 GPU × 2 batch × 2 accum = 8
-    # 如果有4个GPU：总批次 = 4 GPU × 2 batch × 2 accum = 16
+    per_device_train_batch_size=2,  # 从 1 增加到 2（TRL 推荐值）
+    gradient_accumulation_steps=4,   # 保持不变，有效批次 = 2*4 = 8
     
     # ============================================================================
     # 生成配置（GRPO核心参数）
     # ============================================================================
     num_generations=4,  # 每个prompt生成4个候选回答
     generation_batch_size=4,  # ✅ TRL推荐：明确设置生成批次大小
-    max_completion_length=256,  # 缩短长度加速（测试用）
+    max_completion_length=512,  # 适合数学 CoT 推理
     max_prompt_length=1024,
     
     # ============================================================================
     # 采样参数（增加生成多样性）
     # ============================================================================
-    temperature=0.9,  # TRL推荐：0.7-0.9之间
-    top_p=0.9,
-    top_k=50,  # ✅ 添加top_k采样
+    temperature=0.9,  # TRL 推荐值，增加探索
+    top_p=0.9,        # Nucleus 采样
+    top_k=50,         # ✅ 添加Top-K采样
     
     # ============================================================================
-    # 优化器配置（GRPO/RL训练需要小心设置）
+    # 优化器配置（RL 训练需要较小学习率）
     # ============================================================================
-    learning_rate=5e-5,  # 参考TRL GRPO示例
-    warmup_ratio=0.1,  # 10%步数warmup
-    max_grad_norm=1.0,  # ✅ TRL推荐：梯度裁剪防止训练不稳定
+    learning_rate=5e-5,  # 从 2e-4 降低到 5e-5（参考 TRL LoRA 示例）
+    warmup_ratio=0.1,    # 添加 warmup（10% 步数），防止早期训练不稳定
+    max_grad_norm=1.0,   # ✅ TRL推荐：梯度裁剪防止训练不稳定
     optim="paged_adamw_8bit",
     
     # ============================================================================
     # GRPO特定参数
     # ============================================================================
     beta=0.0,  # KL散度系数（0=不使用KL惩罚，参考DAPO论文）
-    # loss_type="grpo",  # 默认值，可不设置
     
     # ============================================================================
-    # 显存优化（多GPU + 4-bit量化）
+    # 显存优化（4-bit量化 + 单GPU）
     # ============================================================================
-    # ⚠️ DDP + gradient_checkpointing + LoRA 存在兼容性问题
-    # 错误：RuntimeError: Expected to mark a variable ready only once
-    # 
-    # 解决方案：关闭 gradient_checkpointing（DDP 模式要求）
-    # - DDP 使用 hook 机制跟踪参数梯度
-    # - gradient_checkpointing 会重新计算导致参数被多次标记
-    # - 与 LoRA 参数组合时触发冲突
-    # 
-    # 如果显存不足：
-    # - 减小 per_device_train_batch_size
-    # - 增加 gradient_accumulation_steps
-    # - 减小 num_generations 或 max_completion_length
-    gradient_checkpointing=False,  # ❌ DDP+LoRA 模式下必须关闭
-    fp16=True,  # 与量化dtype一致
+    gradient_checkpointing=True,  # ✅ TRL强烈推荐：节省显存
+    fp16=True,  # 使用 FP16（与量化一致）
     
     # ============================================================================
-    # 数据加载加速
+    # 数据加载加速（多进程预处理）
     # ============================================================================
-    dataloader_num_workers=4,
-    dataloader_pin_memory=True,
+    dataloader_num_workers=4,  # 利用8个CPU中的4个，加速数据加载
+    dataloader_pin_memory=True,  # 加速 CPU->GPU 数据传输
     
     # ============================================================================
     # 日志和保存策略
     # ============================================================================
-    logging_steps=2,  # 多GPU下更频繁日志
-    save_strategy="steps",
-    save_steps=25,
-    save_total_limit=2,
-    
-    # ============================================================================
-    # 分布式训练配置（accelerate自动处理）
-    # ============================================================================
-    # accelerate 会根据环境变量自动检测多GPU
+    logging_steps=5,     # 更频繁的日志（从 10 改为 5）
+    save_strategy="steps",    # 按步数保存而非 epoch
+    save_steps=50,            # 每 50 步保存一次
+    save_total_limit=3,       # 只保留最近 3 个检查点
 )
 
 # 6. 定义奖励函数（GRPO 需要）
@@ -339,20 +287,15 @@ with Timer("训练器初始化"):
         args=training_args,
         train_dataset=ds,
         peft_config=lora_config,
-        processing_class=tok,
-        reward_funcs=reward_func,
+        processing_class=tok, # TRL 0.23.0 推荐使用 processing_class
+        reward_funcs=reward_func, # 注意：参数名是 reward_funcs（复数），不是 reward_fn！
     )
 
 print("\n" + "="*80)
-print("🚀 开始多GPU GRPO 训练...")
-gpu_count = torch.cuda.device_count() if torch.cuda.is_available() else 1
-print(f"🎮 GPU数量: {gpu_count}")
+print("🚀 开始 GRPO 训练...")
 print(f"📊 配置: {len(ds)} 样本 × {training_args.num_generations} 生成 = {len(ds) * training_args.num_generations} 次推理")
-total_batch = training_args.per_device_train_batch_size * training_args.gradient_accumulation_steps * gpu_count
-print(f"💾 总批次大小: {training_args.per_device_train_batch_size} × {training_args.gradient_accumulation_steps} × {gpu_count} = {total_batch}")
+print(f"💾 批次大小: {training_args.per_device_train_batch_size} × {training_args.gradient_accumulation_steps} = {training_args.per_device_train_batch_size * training_args.gradient_accumulation_steps} (有效)")
 print("="*80 + "\n")
 
 with Timer("GRPO 完整训练"):
     trainer.train()
-
-print("\n✅ 训练完成！检查点保存在: qwen_grpo_lora_multigpu/")
