@@ -30,6 +30,18 @@ from trl import GRPOTrainer, GRPOConfig
 import torch
 import time
 import os
+import numpy as np
+import json
+from datetime import datetime
+
+# 导入统一的答案提取和比较工具
+from answer_utils import compare_answers, parse_answer_field, extract_number_from_text
+
+# ============================================================================
+# 奖励统计日志（用于训练过程监控）
+# ============================================================================
+reward_call_count = 0
+reward_logs = []
 
 # ============================================================================
 # 性能分析工具
@@ -79,65 +91,57 @@ with Timer("量化配置"):
         bnb_4bit_use_double_quant=True,
     )
 
-# 2. 准备数据 - 使用 step_list 作为 CoT 推理过程
+# 2. 准备数据 - 使用 response 作为 CoT 推理过程，answer 作为最终答案
 with Timer("数据集加载"):
-    ds = load_dataset("Kanan275/GSM8k-CoT", "default", split="train[:923]")
+    ds = load_dataset("ankner/gsm8k-CoT", split="train")
+    # 小批量测试（10个样本）：
+    # ds = load_dataset("ankner/gsm8k-CoT", split="train[:10]")
 
 def to_chat(e):
     """
     将数据集格式转换为 GRPO 训练格式
-    输入字段：
-    - instruction: 问题文本（字符串）
-    - step_list: CoT推理步骤（可能是字符串或列表）
-    - final_answer: 最终答案（可能是字符串或列表）
+    输入字段（ankner/gsm8k-CoT）：
+    - question: 问题文本（字符串）
+    - response: CoT推理步骤（字符串）
+    - answer: 最终答案（字符串）
     
     输出格式：
-    - prompt: 问题文本（GRPO 必需字段，不是 query！）
+    - prompt: 问题文本 + 格式指导（GRPO 必需字段）
     - ground_truth: 正确答案（用于奖励函数评估）
     """
-    import json
-    import ast
+    # 直接使用新数据集的字段，无需复杂解析
+    final_ans = e["answer"].strip()
     
-    # 处理 step_list - 可能是字符串、JSON字符串或列表
-    steps = e["step_list"]
-    if isinstance(steps, str):
-        try:
-            steps = json.loads(steps)
-        except json.JSONDecodeError:
-            try:
-                steps = ast.literal_eval(steps)
-            except (ValueError, SyntaxError):
-                steps = [steps]
+    # ============================================================================
+    # 格式指导Prompt：方案 3 - <ans> 标签版
+    # ============================================================================
+    # 优点：
+    # - 清晰的职责分离：<think> 推理，<ans> 答案
+    # - 提取逻辑极简：直接匹配 <ans>...</ans>
+    # - 容错性好：保留回退机制
+    # - Token 效率高（~110 tokens）
+    # ============================================================================
+    formatted_prompt = f"""Solve this math problem step by step.
+
+Output format:
+1. Wrap reasoning in <think>...</think>
+2. Put final answer in <ans>...</ans> (number only, no text)
+
+Example:
+<think>
+Price: $5
+Quantity: 3
+Total: $5 × 3 = $15
+</think>
+<ans>15</ans>
+
+Problem: {e['question']}
+
+Solution:"""
     
-    if isinstance(steps, list):
-        think_process = "\n".join(str(s) for s in steps)
-    else:
-        think_process = str(steps)
-    
-    # 处理 final_answer - 可能是字符串、JSON字符串或列表
-    final_ans = e["final_answer"]
-    if isinstance(final_ans, str):
-        try:
-            final_ans = json.loads(final_ans)
-            if isinstance(final_ans, list) and len(final_ans) > 0:
-                final_ans = final_ans[0]
-        except json.JSONDecodeError:
-            try:
-                final_ans = ast.literal_eval(final_ans)
-                if isinstance(final_ans, list) and len(final_ans) > 0:
-                    final_ans = final_ans[0]
-            except (ValueError, SyntaxError):
-                pass
-    elif isinstance(final_ans, list) and len(final_ans) > 0:
-        final_ans = final_ans[0]
-    
-    final_ans = str(final_ans)
-    
-    # GRPO 需要 'prompt' 字段（不是 query！）
-    # 同时保存 ground_truth 用于奖励函数评估
     return {
-        "prompt": e['instruction'],  # GRPO 训练器期望的字段名
-        "ground_truth": final_ans.strip()  # 用于奖励函数验证答案正确性
+        "prompt": formatted_prompt,
+        "ground_truth": final_ans
     }
 
 with Timer("数据预处理"):
@@ -216,7 +220,17 @@ training_args = GRPOConfig(
     # ============================================================================
     # GRPO特定参数
     # ============================================================================
-    beta=0.0,  # KL散度系数（0=不使用KL惩罚，参考DAPO论文）
+    beta=0.01,  # KL散度系数（2025-11-06修复：0.0→0.01）
+    # 
+    # 修复原因：
+    # - beta=0.0 导致模型无约束偏离预训练分布
+    # - 从预训练模型直接GRPO（无SFT基础）需要保持一定约束
+    # - beta=0.01 是从预训练开始的推荐值（小惩罚，允许探索但不崩溃）
+    # 
+    # 调参建议：
+    # - 如果模型输出混乱 → 增大beta (0.05, 0.1)
+    # - 如果模型太保守不学习 → 减小beta (0.001, 0.005)
+    # 
     # loss_type="grpo",  # 默认值，可不设置
     
     # ============================================================================
@@ -283,8 +297,11 @@ def reward_func(completions, ground_truth=None, **kwargs):
     - 高奖励样本（答案正确）→ 增加其生成概率
     - 低奖励样本（答案错误）→ 降低其生成概率
     模型会自然学到"哪些推理路径导致正确答案"，无需人工设计过程奖励
+    
+    注意：使用统一的答案提取和比较工具（answer_utils），确保与推理阶段一致
     """
-    import re
+    global reward_call_count, reward_logs
+    reward_call_count += 1
     
     rewards = []
     
@@ -298,34 +315,54 @@ def reward_func(completions, ground_truth=None, **kwargs):
             rewards.append(0.5)
             continue
         
-        # 1. 提取模型生成的最终答案
-        # 策略：优先提取 </think> 标签后的内容，否则使用全文
-        predicted_text = completion
-        if "</think>" in completion:
-            # 如果有 CoT 标签，提取标签后的答案部分
-            predicted_text = completion.split("</think>")[-1].strip()
-        
-        # 2. 提取答案中的数字（GSM8K 数学题的答案通常是数字）
-        # 使用正则提取所有数字（包括负数、小数）
-        predicted_numbers = re.findall(r'-?\d+\.?\d*', predicted_text)
-        gt = str(ground_truth[i]).strip()
-        gt_numbers = re.findall(r'-?\d+\.?\d*', gt)
-        
-        # 3. 二元判断：答案正确 vs 错误
-        if predicted_numbers and gt_numbers:
-            # 比较最后一个数字（通常是最终答案）
-            if predicted_numbers[-1] == gt_numbers[-1]:
-                reward = 1.0  # ✅ 答案正确
-            else:
-                reward = 0.0  # ❌ 答案错误
+        # 使用统一的答案比较函数（支持数值比较）
+        # 这确保了训练时的奖励计算与推理时的准确率计算完全一致
+        if compare_answers(completion, ground_truth[i]):
+            reward = 1.0  # ✅ 答案正确
         else:
-            # 如果无法提取数字，尝试直接字符串匹配
-            if gt.lower() in predicted_text.lower():
-                reward = 1.0  # ✅ 文本匹配成功
-            else:
-                reward = 0.0  # ❌ 无法匹配
+            reward = 0.0  # ❌ 答案错误
         
         rewards.append(float(reward))
+    
+    # ============================================================================
+    # 统计奖励分布并保存日志（仅主进程）
+    # ============================================================================
+    if int(os.environ.get("LOCAL_RANK", "0")) == 0:
+        rewards_array = np.array(rewards)
+        mean_reward = rewards_array.mean()
+        std_reward = rewards_array.std()
+        accuracy = (rewards_array == 1.0).mean()
+        
+        # 记录到JSON日志
+        log_entry = {
+            "call_count": reward_call_count,
+            "timestamp": datetime.now().isoformat(),
+            "batch_size": len(rewards),
+            "mean_reward": float(mean_reward),
+            "std_reward": float(std_reward),
+            "accuracy": float(accuracy),
+            "num_correct": int((rewards_array == 1.0).sum()),
+            "num_wrong": int((rewards_array == 0.0).sum()),
+            "num_neutral": int((rewards_array == 0.5).sum()),
+        }
+        reward_logs.append(log_entry)
+        
+        # 每10次打印统计信息
+        if reward_call_count % 10 == 0:
+            print(f"\n{'='*70}")
+            print(f"📊 Reward Statistics (Call #{reward_call_count}):")
+            print(f"   Mean: {mean_reward:.4f} | Std: {std_reward:.4f} | Acc: {accuracy:.2%}")
+            print(f"   Correct: {int(accuracy*len(rewards))}/{len(rewards)}")
+            print(f"{'='*70}\n")
+        
+        # 每50次保存日志到文件
+        if reward_call_count % 50 == 0:
+            output_dir = "qwen_grpo_lora_multigpu"
+            os.makedirs(output_dir, exist_ok=True)
+            log_file = os.path.join(output_dir, "reward_statistics.json")
+            with open(log_file, "w") as f:
+                json.dump(reward_logs, f, indent=2)
+            print(f"💾 Reward logs saved to: {log_file}")
     
     # 返回原始奖励，GRPO 框架会自动执行归一化：
     # r̃ᵢ = (rᵢ - mean(r)) / std(r)
@@ -354,5 +391,18 @@ print("="*80 + "\n")
 
 with Timer("GRPO 完整训练"):
     trainer.train()
+
+# ============================================================================
+# 保存最终奖励统计日志
+# ============================================================================
+if int(os.environ.get("LOCAL_RANK", "0")) == 0 and reward_logs:
+    output_dir = "qwen_grpo_lora_multigpu"
+    os.makedirs(output_dir, exist_ok=True)
+    log_file = os.path.join(output_dir, "reward_statistics.json")
+    with open(log_file, "w") as f:
+        json.dump(reward_logs, f, indent=2)
+    print(f"\n💾 Final reward logs saved to: {log_file}")
+    print(f"📊 Total reward function calls: {reward_call_count}")
+    print(f"📊 Total log entries: {len(reward_logs)}")
 
 print("\n✅ 训练完成！检查点保存在: qwen_grpo_lora_multigpu/")

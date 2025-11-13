@@ -53,65 +53,32 @@ with Timer("量化配置"):
         bnb_4bit_use_double_quant=True,
     )
 
-# 2. 准备数据 - 使用 step_list 作为 CoT 推理过程
+# 2. 准备数据 - 使用 response 作为 CoT 推理过程，answer 作为最终答案
 with Timer("数据集加载"):
-    ds = load_dataset("Kanan275/GSM8k-CoT", "default", split="train[:923]")
+    ds = load_dataset("ankner/gsm8k-CoT", split="train")
+    # 小批量测试（10个样本）：
+    # ds = load_dataset("ankner/gsm8k-CoT", split="train[:10]")
 
 def to_chat(e):
     """
     将数据集格式转换为 GRPO 训练格式
-    输入字段：
-    - instruction: 问题文本（字符串）
-    - step_list: CoT推理步骤（可能是字符串或列表）
-    - final_answer: 最终答案（可能是字符串或列表）
+    输入字段（ankner/gsm8k-CoT）：
+    - question: 问题文本（字符串）
+    - response: CoT推理步骤（字符串）
+    - answer: 最终答案（字符串）
     
     输出格式：
     - prompt: 问题文本（GRPO 必需字段，不是 query！）
     - ground_truth: 正确答案（用于奖励函数评估）
     """
-    import json
-    import ast
-    
-    # 处理 step_list - 可能是字符串、JSON字符串或列表
-    steps = e["step_list"]
-    if isinstance(steps, str):
-        try:
-            steps = json.loads(steps)
-        except json.JSONDecodeError:
-            try:
-                steps = ast.literal_eval(steps)
-            except (ValueError, SyntaxError):
-                steps = [steps]
-    
-    if isinstance(steps, list):
-        think_process = "\n".join(str(s) for s in steps)
-    else:
-        think_process = str(steps)
-    
-    # 处理 final_answer - 可能是字符串、JSON字符串或列表
-    final_ans = e["final_answer"]
-    if isinstance(final_ans, str):
-        try:
-            final_ans = json.loads(final_ans)
-            if isinstance(final_ans, list) and len(final_ans) > 0:
-                final_ans = final_ans[0]
-        except json.JSONDecodeError:
-            try:
-                final_ans = ast.literal_eval(final_ans)
-                if isinstance(final_ans, list) and len(final_ans) > 0:
-                    final_ans = final_ans[0]
-            except (ValueError, SyntaxError):
-                pass
-    elif isinstance(final_ans, list) and len(final_ans) > 0:
-        final_ans = final_ans[0]
-    
-    final_ans = str(final_ans)
+    # 直接使用新数据集的字段，无需复杂解析
+    final_ans = e["answer"].strip()
     
     # GRPO 需要 'prompt' 字段（不是 query！）
     # 同时保存 ground_truth 用于奖励函数评估
     return {
-        "prompt": e['instruction'],  # GRPO 训练器期望的字段名
-        "ground_truth": final_ans.strip()  # 用于奖励函数验证答案正确性
+        "prompt": e['question'],  # GRPO 训练器期望的字段名
+        "ground_truth": final_ans  # 用于奖励函数验证答案正确性
     }
 
 with Timer("数据预处理"):

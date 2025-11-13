@@ -29,19 +29,12 @@
 
 
 
-# 全数据集 完整训练配置
-#SBATCH --cpus-per-task=16
-#SBATCH --mem=48G
-#SBATCH --time=12:05:00
-##SBATCH --gpus-per-task=1
-
-# ============================================================================
-# 如果排队太久或需要特定GPU，可取消以下注释指定GPU型号：
-# #SBATCH --gpus-per-task=a40:1     # 推荐：性能强，资源相对充足
-# #SBATCH --gpus-per-task=v100:1    # 备选：性能够用，资源充足
-# SBATCH --gpus-per-task=a100:1    # 高性能但排队长
-# #SBATCH --gpus-per-task=l40s:1    # 最强但排队最长
-# ============================================================================
+# 快速验证配置（10样本 GRPO 训练）
+#SBATCH --cpus-per-task=8
+#SBATCH --mem=24G
+#SBATCH --time=00:15:00
+#SBATCH --gres=gpu:1
+#SBATCH --constraint="v100|a40|a100"
 
 echo ""
 echo "Starting at `date`"

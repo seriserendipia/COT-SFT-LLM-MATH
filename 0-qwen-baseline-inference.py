@@ -1,11 +1,10 @@
 # mamba activate torch-env
+# Baseline 评估：直接使用 Qwen2.5-Coder-1.5B 原始模型，不做任何微调
 
 from datasets import load_dataset
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
-from peft import PeftModel
 import torch
 import json
-import re
 from tqdm import tqdm
 import os
 
@@ -44,8 +43,8 @@ bnb_config = BitsAndBytesConfig(
 # 2. 加载数据集（测试集：1320 samples）
 print("Loading dataset...")
 ds = load_dataset("ankner/gsm8k-CoT", split="test")
-# 小批量测试（100个样本）：
-# ds = load_dataset("ankner/gsm8k-CoT", split="test[:100]")
+# 小批量测试（200个样本）：
+# ds = load_dataset("ankner/gsm8k-CoT", split="test[:200]")
 
 def to_chat(e):
     """
@@ -77,109 +76,64 @@ def to_chat(e):
 ds = ds.map(to_chat)
 print(f"Loaded {len(ds)} test samples")
 
-# 3. 加载基础模型
-print("Loading base model...")
+# 3. 加载原始基础模型（不加载任何 LoRA adapter）
+print("\n" + "="*70)
+print("🔧 Loading BASELINE model (no fine-tuning)...")
+print("   Model: Qwen/Qwen2.5-Coder-1.5B")
+print("   Quantization: 4-bit (for memory efficiency)")
+print("   Fine-tuning: None (this is the baseline)")
+print("="*70 + "\n")
+
 model_id = "Qwen/Qwen2.5-Coder-1.5B"
-base_model = AutoModelForCausalLM.from_pretrained(
+model = AutoModelForCausalLM.from_pretrained(
     model_id,
     quantization_config=bnb_config,
     device_map="auto",
     torch_dtype=torch.bfloat16,
     trust_remote_code=True,
 )
-
-# 4. 加载LoRA权重
-print("Loading LoRA adapter...")
-
-# 自动查找最新的 checkpoint
-import glob
-base_lora_dir = "qwen_peft_sft_lora"
-
-# 查找所有 checkpoint-* 目录
-checkpoint_dirs = glob.glob(os.path.join(base_lora_dir, "checkpoint-*"))
-
-if checkpoint_dirs:
-    # 按 checkpoint 编号排序，选择最大的（最新的）
-    checkpoint_dirs.sort(key=lambda x: int(x.split("-")[-1]))
-    lora_path = checkpoint_dirs[-1]  # 最后一个 = 编号最大 = 最新
-    print(f"Found {len(checkpoint_dirs)} checkpoints, using latest: {lora_path}")
-else:
-    # 如果没有 checkpoint 子目录，尝试直接使用根目录
-    lora_path = base_lora_dir
-    print(f"No checkpoints found, using root directory: {lora_path}")
-
-# 验证路径存在
-if not os.path.exists(lora_path):
-    print(f"\n{'='*70}")
-    print(f"❌ ERROR: LoRA adapter directory not found!")
-    print(f"   Looking for: {os.path.abspath(lora_path)}")
-    print(f"   Current working directory: {os.getcwd()}")
-    print(f"\n   Possible solutions:")
-    print(f"   1. Run this script from the same directory where training was done")
-    print(f"   2. Use absolute path: lora_path = '/home1/yihelu/csci566/qwen_peft_sft_lora'")
-    print(f"   3. Run check_model_files.py to diagnose the issue")
-    print("="*70)
-    import sys
-    sys.exit(1)
-
-# 检查关键文件
-adapter_config = os.path.join(lora_path, "adapter_config.json")
-if not os.path.exists(adapter_config):
-    print(f"\n{'='*70}")
-    print(f"❌ ERROR: adapter_config.json not found in {lora_path}")
-    print(f"   This file is required to load the LoRA adapter.")
-    print(f"   Training may not have completed successfully.")
-    print("="*70)
-    import sys
-    sys.exit(1)
-
-print(f"✅ Found LoRA adapter at: {os.path.abspath(lora_path)}")
-
-model = PeftModel.from_pretrained(base_model, lora_path)
 model.eval()
 
-# 5. 加载分词器
+# 4. 加载分词器
 tok = AutoTokenizer.from_pretrained(model_id, trust_remote_code=True)
 tok.pad_token = tok.eos_token
 
-# 6. 推理函数
-# 注意：extract_answer() 函数已从 answer_utils 导入，这里不再重复定义
-
+# 5. 推理函数
 def generate_answer(question, max_length=2048):
     """
-    生成答案（使用确定性解码）
+    生成答案（Baseline 使用 Qwen 官方 chat template）
     
-    ⚠️ 重要：推理prompt必须与训练时一致！
-    - 训练时使用了带格式指导的英文prompt
-    - 推理时也必须使用相同格式，否则模型表现会下降
+    设计说明：
+    - Baseline 应该展示预训练模型的最佳性能
+    - 使用官方 chat template 确保模型在最熟悉的格式下工作
+    - 不强制特定输出格式，让模型自然发挥
     
     生成参数说明：
     - temperature=0.0: 使用贪心解码（选择概率最高的token）
     - do_sample=False: 关闭随机采样
     - 这样可以保证每次运行结果一致，便于评估和对比
     """
-    # ============================================================================
-    # 格式化Prompt：与训练时保持一致（方案 3：<ans> 标签版）
-    # ============================================================================
-    prompt = f"""Solve this math problem step by step.
-
-Output format:
-1. Wrap reasoning in <think>...</think>
-2. Put final answer in <ans>...</ans> (number only, no text)
-
-Example:
-<think>
-Price: $5
-Quantity: 3
-Total: $5 × 3 = $15
-</think>
-<ans>15</ans>
-
-Problem: {question}
-
-Solution:"""
+    # 使用 Qwen 官方的 chat template
+    # 根据 Qwen2.5-Coder 官方文档，所有 Qwen 模型都支持 apply_chat_template
+    messages = [
+        {
+            "role": "system",
+            "content": "You are a helpful assistant that solves math problems step by step."
+        },
+        {
+            "role": "user",
+            "content": f"Solve this problem:\n{question}\n\nPlease think step by step and provide your final numerical answer."
+        }
+    ]
     
-    inputs = tok(prompt, return_tensors="pt", truncation=True, max_length=max_length)
+    # 应用 chat template（Qwen2.5-Coder 原生支持）
+    text = tok.apply_chat_template(
+        messages,
+        tokenize=False,
+        add_generation_prompt=True
+    )
+    
+    inputs = tok(text, return_tensors="pt", truncation=True, max_length=max_length)
     inputs = {k: v.to(model.device) for k, v in inputs.items()}
     
     with torch.no_grad():
@@ -189,20 +143,28 @@ Solution:"""
             temperature=0.0,           # ✅ 确定性生成（贪心解码）
             do_sample=False,           # ✅ 关闭采样
             pad_token_id=tok.eos_token_id,
+            eos_token_id=tok.eos_token_id,
         )
     
-    generated_text = tok.decode(outputs[0], skip_special_tokens=True)
-    # 移除输入部分
-    response = generated_text[len(prompt):].strip()
+    # 只提取新生成的内容（去除 prompt 部分）
+    generated_ids = outputs[0][inputs['input_ids'].shape[1]:]
+    response = tok.decode(generated_ids, skip_special_tokens=True).strip()
+    
     return response
 
-# 7. 批量推理
-print("Starting inference...")
+# 6. 批量推理
+print("\n" + "="*70)
+print("🚀 Starting BASELINE model inference...")
+print(f"📊 Test samples: {len(ds)}")
+print(f"🎯 Evaluation metric: Accuracy")
+print(f"🔧 Generation mode: Deterministic (temperature=0.0)")
+print("="*70 + "\n")
+
 results = []
 correct = 0
 total = 0
 
-for i, example in enumerate(tqdm(ds)):
+for i, example in enumerate(tqdm(ds, desc="Evaluating")):
     question = example["question"]
     ground_truth = example["ground_truth"]
     
@@ -232,48 +194,90 @@ for i, example in enumerate(tqdm(ds)):
     # 每50个样本打印一次进度
     if (i + 1) % 50 == 0:
         acc = correct / total
-        print(f"\nProgress: {i+1}/{len(ds)}, Accuracy so far: {acc:.4f}")
+        print(f"\nProgress: {i+1}/{len(ds)}, Accuracy so far: {acc:.4f} ({acc*100:.2f}%)")
 
-# 8. 计算评估指标
+# 7. 计算评估指标
 accuracy = correct / total
-print(f"\n{'='*50}")
-print(f"Final Evaluation Results:")
+print(f"\n{'='*70}")
+print(f"📈 Final Evaluation Results (BASELINE Model):")
+print(f"{'='*70}")
 print(f"Total samples: {total}")
 print(f"Correct predictions: {correct}")
+print(f"Wrong predictions: {total - correct}")
 print(f"Accuracy: {accuracy:.4f} ({accuracy*100:.2f}%)")
-print(f"{'='*50}\n")
+print(f"{'='*70}\n")
 
-# 9. 保存结果
-output_dir = "inference_results_sft"  # 明确标注是 SFT 模型的推理结果
+# 8. 保存结果
+output_dir = "inference_results_baseline"  # Baseline 模型的推理结果
 os.makedirs(output_dir, exist_ok=True)
 
 # 保存详细推理结果
 results_file = os.path.join(output_dir, "inference_results.json")
 with open(results_file, "w", encoding="utf-8") as f:
     json.dump(results, f, ensure_ascii=False, indent=2)
-print(f"Inference results saved to: {results_file}")
+print(f"✅ Inference results saved to: {results_file}")
 
 # 保存评估指标
 metrics = {
     "total_samples": total,
     "correct_predictions": correct,
+    "wrong_predictions": total - correct,
     "accuracy": accuracy,
-    "model_path": lora_path,
+    "model_type": "BASELINE",
+    "model_path": model_id,
+    "base_model": model_id,
+    "fine_tuning": "None",
     "dataset": "ankner/gsm8k-CoT",
     "split": "test",
+    "generation_config": {
+        "max_new_tokens": 512,
+        "temperature": 0.0,
+        "do_sample": False,
+        "method": "greedy_decoding"
+    }
 }
 
 metrics_file = os.path.join(output_dir, "evaluation_metrics.json")
 with open(metrics_file, "w", encoding="utf-8") as f:
     json.dump(metrics, f, ensure_ascii=False, indent=2)
-print(f"Evaluation metrics saved to: {metrics_file}")
+print(f"✅ Evaluation metrics saved to: {metrics_file}")
 
-# 10. 保存错误案例分析
+# 9. 保存错误案例分析
 wrong_cases = [r for r in results if not r["is_correct"]]
 wrong_cases_file = os.path.join(output_dir, "wrong_cases.json")
 with open(wrong_cases_file, "w", encoding="utf-8") as f:
     json.dump(wrong_cases, f, ensure_ascii=False, indent=2)
-print(f"Wrong cases saved to: {wrong_cases_file}")
-print(f"\nTotal wrong cases: {len(wrong_cases)}")
+print(f"✅ Wrong cases saved to: {wrong_cases_file}")
+print(f"   Total wrong cases: {len(wrong_cases)}")
 
-print("\nInference and evaluation completed!")
+# 10. 打印一些示例结果
+if len(results) > 0:
+    print(f"\n{'='*70}")
+    print("📝 Sample Results:")
+    print(f"{'='*70}")
+    
+    # 打印第一个正确的案例
+    correct_cases = [r for r in results if r["is_correct"]]
+    if correct_cases:
+        sample = correct_cases[0]
+        print(f"\n✅ Correct Example (Index {sample['index']}):")
+        print(f"Question: {sample['question'][:100]}...")
+        print(f"Predicted: {sample['predicted_answer']}")
+        print(f"Ground Truth: {sample['ground_truth_extracted']}")
+    
+    # 打印第一个错误的案例
+    if wrong_cases:
+        sample = wrong_cases[0]
+        print(f"\n❌ Wrong Example (Index {sample['index']}):")
+        print(f"Question: {sample['question'][:100]}...")
+        print(f"Predicted: {sample['predicted_answer']}")
+        print(f"Ground Truth: {sample['ground_truth_extracted']}")
+        print(f"Full Response: {sample['generated_response'][:200]}...")
+
+print(f"\n{'='*70}")
+print("🎉 BASELINE Model Inference and Evaluation Completed!")
+print(f"{'='*70}")
+print("\n💡 This baseline result can be compared with:")
+print("   - SFT model: inference_results_sft/")
+print("   - GRPO model: inference_results_grpo/")
+print(f"{'='*70}\n")
