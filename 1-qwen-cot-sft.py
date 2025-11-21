@@ -36,66 +36,31 @@ bnb_config = BitsAndBytesConfig(
     bnb_4bit_use_double_quant=True,
 )
 
-# 2. 准备数据 - 使用 step_list 作为 CoT 推理过程
-ds = load_dataset("Kanan275/GSM8k-CoT", "default", split="train[:923]")
+# 2. 准备数据 - 使用 response 作为 CoT 推理过程，answer 作为最终答案
+# 完整训练集：7470 samples
+ds = load_dataset("ankner/gsm8k-CoT", split="train")
+# 小批量测试（100个样本）：
+# ds = load_dataset("ankner/gsm8k-CoT", split="train[:100]")
 
 def to_chat(e):
     """
     将数据集格式转换为训练格式
-    输入字段：
-    - instruction: 问题文本（字符串）
-    - step_list: CoT推理步骤（可能是字符串或列表）
-    - final_answer: 最终答案（可能是字符串或列表）
+    输入字段（ankner/gsm8k-CoT）：
+    - question: 问题文本（字符串）
+    - response: CoT推理步骤（字符串）
+    - answer: 最终答案（字符串）
     
     输出格式：
     - question: 问题文本
     - answer: <think>推理步骤</think>\n最终答案
     """
-    import json
-    import ast
-    
-    # 处理 step_list - 可能是字符串、JSON字符串或列表
-    steps = e["step_list"]
-    if isinstance(steps, str):
-        # 尝试多种解析方式
-        try:
-            steps = json.loads(steps)
-        except json.JSONDecodeError:
-            try:
-                # 使用 ast.literal_eval 处理 Python 字面量格式
-                steps = ast.literal_eval(steps)
-            except (ValueError, SyntaxError):
-                # 如果都失败，将整个字符串作为单个步骤
-                steps = [steps]
-    
-    # 合并步骤为文本
-    if isinstance(steps, list):
-        think_process = "\n".join(str(s) for s in steps)
-    else:
-        think_process = str(steps)
-    
-    # 处理 final_answer - 可能是字符串、JSON字符串或列表
-    final_ans = e["final_answer"]
-    if isinstance(final_ans, str):
-        try:
-            final_ans = json.loads(final_ans)
-            if isinstance(final_ans, list) and len(final_ans) > 0:
-                final_ans = final_ans[0]
-        except json.JSONDecodeError:
-            try:
-                final_ans = ast.literal_eval(final_ans)
-                if isinstance(final_ans, list) and len(final_ans) > 0:
-                    final_ans = final_ans[0]
-            except (ValueError, SyntaxError):
-                pass  # 保持原字符串
-    elif isinstance(final_ans, list) and len(final_ans) > 0:
-        final_ans = final_ans[0]
-    
-    final_ans = str(final_ans)
+    # 直接使用新数据集的字段，无需复杂解析
+    think_process = e["response"].strip()
+    final_ans = e["answer"].strip()
     
     # 构建完整答案：<think>推理过程</think>\n最终答案
-    full_answer = f"<think>{think_process.strip()}</think>\n{final_ans.strip()}"
-    return {"question": e['instruction'], "answer": full_answer}
+    full_answer = f"<think>{think_process}</think>\n{final_ans}"
+    return {"question": e['question'], "answer": full_answer}
 
 ds = ds.map(to_chat)
 
@@ -136,11 +101,43 @@ training_args = SFTConfig(
     fp16=True, # V100 不支持 bf16，使用 fp16
     optim="paged_adamw_8bit", # 优化器
     dataset_text_field="text", # 指定文本字段名
+    
+    # ===== 验证集配置 =====
+    # 自动从训练集中划分 10% 作为验证集
+    dataset_kwargs={"val_size": 0.1},
+    # 每 100 步评估一次验证集
+    evaluation_strategy="steps",
+    eval_steps=100,
+    # 记录最佳模型（根据验证集 loss）
+    load_best_model_at_end=True,
+    metric_for_best_model="eval_loss",
 )
 
 # 重新准备数据，使用标准的 text 字段格式
 def prepare_text(e):
-    text = f"用户: {e['question']}\n助手: {e['answer']}"
+    # ============================================================================
+    # 方案 3：<ans> 标签版 - 编号列表 + 清晰的答案标签
+    # ============================================================================
+    formatted_question = f"""Solve this math problem step by step.
+
+Output format:
+1. Wrap reasoning in <think>...</think>
+2. Put final answer in <ans>...</ans> (number only, no text)
+
+Example:
+<think>
+Price: $5
+Quantity: 3
+Total: $5 × 3 = $15
+</think>
+<ans>15</ans>
+
+Problem: {e['question']}
+
+Solution:"""
+    
+    # ⚠️ 重要：在 "Solution:" 后添加空格，与推理时的格式完全一致
+    text = f"{formatted_question} {e['answer']}"
     return {"text": text}
 
 ds = ds.map(prepare_text)

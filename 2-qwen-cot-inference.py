@@ -9,6 +9,9 @@ import re
 from tqdm import tqdm
 import os
 
+# 导入统一的答案提取和比较工具
+from answer_utils import extract_answer, compare_answers
+
 # 检查GPU可用性
 print(f"PyTorch version: {torch.__version__}")
 print(f"CUDA available: {torch.cuda.is_available()}")
@@ -38,67 +41,35 @@ bnb_config = BitsAndBytesConfig(
     bnb_4bit_use_double_quant=True,
 )
 
-# 2. 加载数据集
+# 2. 加载数据集（测试集：1320 samples）
 print("Loading dataset...")
-ds = load_dataset("Kanan275/GSM8k-CoT", "default", split="train[924:1319]")
+ds = load_dataset("ankner/gsm8k-CoT", split="test")
+# 小批量测试（100个样本）：
+# ds = load_dataset("ankner/gsm8k-CoT", split="test[:100]")
 
 def to_chat(e):
     """
     将数据集格式转换为推理格式
-    输入字段：
-    - instruction: 问题文本（字符串）
-    - step_list: CoT推理步骤（可能是字符串或列表）
-    - final_answer: 最终答案（可能是字符串或列表）
+    输入字段（ankner/gsm8k-CoT）：
+    - question: 问题文本（字符串）
+    - response: CoT推理步骤（字符串）
+    - answer: 最终答案（字符串）
     
     输出格式：
     - question: 问题文本
     - answer: <think>推理步骤</think>\n最终答案
     - ground_truth: 最终答案（用于评估）
     """
-    import json
-    import ast
-    
-    # 处理 step_list - 可能是字符串、JSON字符串或列表
-    steps = e["step_list"]
-    if isinstance(steps, str):
-        try:
-            steps = json.loads(steps)
-        except json.JSONDecodeError:
-            try:
-                steps = ast.literal_eval(steps)
-            except (ValueError, SyntaxError):
-                steps = [steps]
-    
-    if isinstance(steps, list):
-        think_process = "\n".join(str(s) for s in steps)
-    else:
-        think_process = str(steps)
-    
-    # 处理 final_answer - 可能是字符串、JSON字符串或列表
-    final_ans = e["final_answer"]
-    if isinstance(final_ans, str):
-        try:
-            final_ans = json.loads(final_ans)
-            if isinstance(final_ans, list) and len(final_ans) > 0:
-                final_ans = final_ans[0]
-        except json.JSONDecodeError:
-            try:
-                final_ans = ast.literal_eval(final_ans)
-                if isinstance(final_ans, list) and len(final_ans) > 0:
-                    final_ans = final_ans[0]
-            except (ValueError, SyntaxError):
-                pass
-    elif isinstance(final_ans, list) and len(final_ans) > 0:
-        final_ans = final_ans[0]
-    
-    final_ans = str(final_ans)
+    # 直接使用新数据集的字段，无需复杂解析
+    think_process = e["response"].strip()
+    final_ans = e["answer"].strip()
     
     # 构建完整答案
-    full_answer = f"<think>{think_process.strip()}</think>\n{final_ans.strip()}"
-    ground_truth = final_ans.strip()  # 用于评估的标准答案
+    full_answer = f"<think>{think_process}</think>\n{final_ans}"
+    ground_truth = final_ans  # 用于评估的标准答案
     
     return {
-        "question": e['instruction'], 
+        "question": e['question'], 
         "answer": full_answer,
         "ground_truth": ground_truth
     }
@@ -172,23 +143,41 @@ tok = AutoTokenizer.from_pretrained(model_id, trust_remote_code=True)
 tok.pad_token = tok.eos_token
 
 # 6. 推理函数
-def extract_answer(text):
-    """从生成的文本中提取最终答案"""
-    # 尝试提取 </think> 之后的内容
-    if "</think>" in text:
-        answer = text.split("</think>")[-1].strip()
-    else:
-        answer = text.strip()
-    
-    # 提取数字
-    numbers = re.findall(r'-?\d+\.?\d*', answer)
-    if numbers:
-        return numbers[-1]  # 返回最后一个数字
-    return answer
+# 注意：extract_answer() 函数已从 answer_utils 导入，这里不再重复定义
 
 def generate_answer(question, max_length=2048):
-    """生成答案"""
-    prompt = f"用户: {question}\n助手:"
+    """
+    生成答案（使用确定性解码）
+    
+    ⚠️ 重要：推理prompt必须与训练时一致！
+    - 训练时使用了带格式指导的英文prompt
+    - 推理时也必须使用相同格式，否则模型表现会下降
+    
+    生成参数说明：
+    - temperature=0.0: 使用贪心解码（选择概率最高的token）
+    - do_sample=False: 关闭随机采样
+    - 这样可以保证每次运行结果一致，便于评估和对比
+    """
+    # ============================================================================
+    # 格式化Prompt：与训练时保持一致（方案 3：<ans> 标签版）
+    # ============================================================================
+    prompt = f"""Solve this math problem step by step.
+
+Output format:
+1. Wrap reasoning in <think>...</think>
+2. Put final answer in <ans>...</ans> (number only, no text)
+
+Example:
+<think>
+Price: $5
+Quantity: 3
+Total: $5 × 3 = $15
+</think>
+<ans>15</ans>
+
+Problem: {question}
+
+Solution:"""
     
     inputs = tok(prompt, return_tensors="pt", truncation=True, max_length=max_length)
     inputs = {k: v.to(model.device) for k, v in inputs.items()}
@@ -197,9 +186,8 @@ def generate_answer(question, max_length=2048):
         outputs = model.generate(
             **inputs,
             max_new_tokens=512,
-            temperature=0.7,
-            top_p=0.9,
-            do_sample=True,
+            temperature=0.0,           # ✅ 确定性生成（贪心解码）
+            do_sample=False,           # ✅ 关闭采样
             pad_token_id=tok.eos_token_id,
         )
     
@@ -223,8 +211,8 @@ for i, example in enumerate(tqdm(ds)):
     predicted_answer = extract_answer(generated_response)
     gt_answer = extract_answer(ground_truth)
     
-    # 判断是否正确
-    is_correct = predicted_answer == gt_answer
+    # 判断是否正确（使用数值比较）
+    is_correct = compare_answers(predicted_answer, gt_answer)
     if is_correct:
         correct += 1
     total += 1
@@ -271,8 +259,8 @@ metrics = {
     "correct_predictions": correct,
     "accuracy": accuracy,
     "model_path": lora_path,
-    "dataset": "Kanan275/GSM8k-CoT",
-    "split": "train[200:400]",
+    "dataset": "ankner/gsm8k-CoT",
+    "split": "test",
 }
 
 metrics_file = os.path.join(output_dir, "evaluation_metrics.json")
