@@ -101,6 +101,16 @@ training_args = SFTConfig(
     fp16=True, # V100 不支持 bf16，使用 fp16
     optim="paged_adamw_8bit", # 优化器
     dataset_text_field="text", # 指定文本字段名
+    
+    # ===== 验证集配置 =====
+    # 自动从训练集中划分 10% 作为验证集
+    dataset_kwargs={"val_size": 0.1},
+    # 每 100 步评估一次验证集
+    evaluation_strategy="steps",
+    eval_steps=100,
+    # 记录最佳模型（根据验证集 loss）
+    load_best_model_at_end=True,
+    metric_for_best_model="eval_loss",
 )
 
 # 重新准备数据，使用标准的 text 字段格式

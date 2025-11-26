@@ -37,7 +37,7 @@
 # 当前配置：完整训练（7470样本，2×GPU）
 #SBATCH --cpus-per-task=16
 #SBATCH --mem=64G
-#SBATCH --time=24:00:00
+#SBATCH --time=48:00:00
 #SBATCH --gres=gpu:2
 #SBATCH --constraint="v100|a40|a100"
 #SBATCH --mail-user=yihelu@usc.edu

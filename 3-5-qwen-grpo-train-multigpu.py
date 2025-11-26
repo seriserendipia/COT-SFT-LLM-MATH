@@ -262,8 +262,8 @@ training_args = GRPOConfig(
     # ============================================================================
     logging_steps=2,  # 多GPU下更频繁日志
     save_strategy="steps",
-    save_steps=25,
-    save_total_limit=2,
+    save_steps=100,       # 每 100 步保存一次
+    save_total_limit=10,  # 保留最新 10 个 checkpoint（绘制训练曲线）
     
     # ============================================================================
     # 分布式训练配置（accelerate自动处理）
