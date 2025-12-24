@@ -1,0 +1,102 @@
+[
+  {
+    "call_count": 1,
+    "timestamp": "2025-11-20T16:55:15.529520",
+    "batch_size": 4,
+    "mean_reward": 0.25,
+    "std_reward": 0.4330127018922193,
+    "accuracy": 0.25,
+    "num_correct": 1,
+    "num_wrong": 3
+  },
+  {
+    "call_count": 2,
+    "timestamp": "2025-11-20T16:55:29.245200",
+    "batch_size": 4,
+    "mean_reward": 0.25,
+    "std_reward": 0.4330127018922193,
+    "accuracy": 0.25,
+    "num_correct": 1,
+    "num_wrong": 3
+  },
+  {
+    "call_count": 3,
+    "timestamp": "2025-11-20T16:55:41.170444",
+    "batch_size": 4,
+    "mean_reward": 0.0,
+    "std_reward": 0.0,
+    "accuracy": 0.0,
+    "num_correct": 0,
+    "num_wrong": 4
+  },
+  {
+    "call_count": 4,
+    "timestamp": "2025-11-20T16:55:52.901297",
+    "batch_size": 4,
+    "mean_reward": 0.0,
+    "std_reward": 0.0,
+    "accuracy": 0.0,
+    "num_correct": 0,
+    "num_wrong": 4
+  },
+  {
+    "call_count": 5,
+    "timestamp": "2025-11-20T16:56:04.572507",
+    "batch_size": 4,
+    "mean_reward": 0.5,
+    "std_reward": 0.5,
+    "accuracy": 0.5,
+    "num_correct": 2,
+    "num_wrong": 2
+  },
+  {
+    "call_count": 6,
+    "timestamp": "2025-11-20T16:56:16.307938",
+    "batch_size": 4,
+    "mean_reward": 0.75,
+    "std_reward": 0.4330127018922193,
+    "accuracy": 0.75,
+    "num_correct": 3,
+    "num_wrong": 1
+  },
+  {
+    "call_count": 7,
+    "timestamp": "2025-11-20T16:56:28.025900",
+    "batch_size": 4,
+    "mean_reward": 0.0,
+    "std_reward": 0.0,
+    "accuracy": 0.0,
+    "num_correct": 0,
+    "num_wrong": 4
+  },
+  {
+    "call_count": 8,
+    "timestamp": "2025-11-20T16:56:39.687219",
+    "batch_size": 4,
+    "mean_reward": 0.5,
+    "std_reward": 0.5,
+    "accuracy": 0.5,
+    "num_correct": 2,
+    "num_wrong": 2
+  },
+  {
+    "call_count": 9,
+    "timestamp": "2025-11-20T16:56:51.375062",
+    "batch_size": 4,
+    "mean_reward": 0.0,
+    "std_reward": 0.0,
+    "accuracy": 0.0,
+    "num_correct": 0,
+    "num_wrong": 4
+  },
+  {
+    "call_count": 10,
+    "timestamp": "2025-11-20T16:57:03.037023",
+    "batch_size": 4,
+    "mean_reward": 0.25,
+    "std_reward": 0.4330127018922193,
+    "accuracy": 0.25,
+    "num_correct": 1,
+    "num_wrong": 3
+  }
+]

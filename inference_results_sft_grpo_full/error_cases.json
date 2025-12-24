@@ -1,0 +1,50 @@
+[
+  {
+    "sample_id": 1,
+    "question": "James decides to run 3 sprints 3 times a week.  He runs 60 meters each sprint.  How many total meters does he run a week?",
+    "ground_truth": "540",
+    "prediction": "180",
+    "full_response": " <think>\n1. James runs 3 sprints each week.\n2. He runs 60 meters each sprint.\n3. To find the total distance he runs in one week, multiply the number of sprints by the distance per sprint.\n</think>\n<ans>180</ans>",
+    "correct": false,
+    "inference_time": 3.685614824295044,
+    "prompt_length": 119,
+    "generation_length": 63,
+    "total_length": 182,
+    "tokens_per_second": 17.093484534714,
+    "has_think_tag": true,
+    "has_ans_tag": true,
+    "format_correct": true
+  },
+  {
+    "sample_id": 5,
+    "question": "Two trains leave San Rafael at the same time. They begin traveling westward, both traveling for 80 miles. The next day, they travel northwards, covering 150 miles. What's the distance covered by each train in the two days?",
+    "ground_truth": "230",
+    "prediction": "460",
+    "full_response": " <think>\nLet's calculate the distance covered by each train in the first day.\nThe first train travels 80 miles westward.\nThe second train travels 80 miles westward.\nThe total distance covered by both trains in the first day is 80 + 80 = 160 miles.\nNow, let's calculate the distance covered by each train in the second day.\nThe first train travels 150 miles northward.\nThe second train travels 150 miles northward.\nThe total distance covered by both trains in the second day is 150 + 150 = 300 miles.\nTo find the total distance covered by each train in the two days, we add the distances covered in each day.\nThe first train covers 160 + 300 = 460 miles.\nThe second train covers 160 + 300 = 460 miles.\nTherefore, the distance covered by each train in the two days is 460 miles.\n</think>\n<ans>460</ans>",
+    "correct": false,
+    "inference_time": 13.262399911880493,
+    "prompt_length": 137,
+    "generation_length": 228,
+    "total_length": 365,
+    "tokens_per_second": 17.191458673762128,
+    "has_think_tag": true,
+    "has_ans_tag": true,
+    "format_correct": true
+  },
+  {
+    "sample_id": 7,
+    "question": "Toula went to the bakery and bought various types of pastries. She bought 3 dozen donuts which cost $68 per dozen, 2 dozen mini cupcakes which cost $80 per dozen, and 6 dozen mini cheesecakes for $55 per dozen. How much was the total cost?",
+    "ground_truth": "694",
+    "prediction": "794",
+    "full_response": " <think>\nFirst, we need to find the cost of each type of pastry.\nThe cost of 3 dozen donuts is $68 per dozen, so the total cost is 3 \u00d7 $68 = $204.\nThe cost of 2 dozen mini cupcakes is $80 per dozen, so the total cost is 2 \u00d7 $80 = $160.\nThe cost of 6 dozen mini cheesecakes is $55 per dozen, so the total cost is 6 \u00d7 $55 = $330.\nNow, we can add up the total cost of all the pastries: $204 + $160 + $330 = $794.\n</think>\n<ans>794</ans>",
+    "correct": false,
+    "inference_time": 9.482231378555298,
+    "prompt_length": 148,
+    "generation_length": 163,
+    "total_length": 311,
+    "tokens_per_second": 17.19004667705488,
+    "has_think_tag": true,
+    "has_ans_tag": true,
+    "format_correct": true
+  }
+]

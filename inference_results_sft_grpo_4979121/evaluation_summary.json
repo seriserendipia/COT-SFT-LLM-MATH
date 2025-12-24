@@ -1,0 +1,59 @@
+{
+  "training_job_id": "4979121",
+  "timestamp": "2025-11-26T10:07:41.239585",
+  "eval_mode": "full (SFT + GRPO)",
+  "model_architecture": "Base + SFT (merged) + GRPO LoRA",
+  "sft_adapter_path": "./qwen_peft_sft_lora/checkpoint-1867",
+  "grpo_adapter_path": "./qwen_sft_grpo_lora_4979121/checkpoint-3732",
+  "note": "Using latest checkpoints (auto-selected)",
+  "dataset": "ankner/gsm8k-CoT test split",
+  "num_samples": 1316,
+  "total_eval_time": 13936.019351482391,
+  "avg_time_per_sample": 10.589680358269295,
+  "accuracy": 0.6846504559270516,
+  "num_correct": 901,
+  "num_wrong": 415,
+  "inference_time": {
+    "mean": 10.588177799272682,
+    "std": 4.417458581899671,
+    "min": 3.0251994132995605,
+    "max": 29.038148403167725,
+    "median": 9.753195524215698
+  },
+  "generation_length": {
+    "mean": 188.89361702127658,
+    "std": 78.90061996966823,
+    "min": 54,
+    "max": 512,
+    "median": 174.0
+  },
+  "tokens_per_second": {
+    "mean": 17.83606697720541,
+    "median": 17.860278494397974
+  },
+  "format_compliance": {
+    "format_correct_rate": 0.9452887537993921,
+    "format_correct_count": 1244
+  },
+  "accuracy_by_length": {
+    "50-100": {
+      "accuracy": 0.9074074074074074,
+      "count": 108
+    },
+    "100-200": {
+      "accuracy": 0.7369146005509641,
+      "count": 726
+    },
+    "200-512": {
+      "accuracy": 0.5665961945031712,
+      "count": 473
+    }
+  },
+  "error_analysis": {
+    "total_errors": 415,
+    "errors_by_format": {
+      "format_correct": 385,
+      "format_incorrect": 30
+    }
+  }
+}

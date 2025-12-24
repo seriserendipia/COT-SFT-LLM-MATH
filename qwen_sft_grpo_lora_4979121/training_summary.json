@@ -1,0 +1,19 @@
+{
+  "job_id": "4979121",
+  "start_time": "2025-11-26T06:14:16.395734",
+  "model_id": "Qwen/Qwen2.5-Coder-1.5B",
+  "sft_adapter_path": "./qwen_peft_sft_lora/checkpoint-1867",
+  "output_dir": "./qwen_sft_grpo_lora_4979121",
+  "num_samples": 7465,
+  "num_epochs": 1,
+  "batch_size": 2,
+  "gradient_accumulation_steps": 4,
+  "learning_rate": 5e-06,
+  "beta": 0.01,
+  "num_generations": 8,
+  "max_completion_length": 512,
+  "total_reward_calls": 3732,
+  "final_avg_accuracy": 0.7065916398713826,
+  "final_max_accuracy": 1.0,
+  "final_min_accuracy": 0.0
+}

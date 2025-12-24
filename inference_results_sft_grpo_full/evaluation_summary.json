@@ -1,0 +1,58 @@
+{
+  "timestamp": "2025-11-20T17:00:07.205630",
+  "eval_mode": "full (SFT + GRPO)",
+  "model_architecture": "Base + SFT (merged) + GRPO LoRA",
+  "sft_adapter_path": "./qwen_peft_sft_lora/checkpoint-1867",
+  "grpo_adapter_path": "./qwen_sft_grpo_lora/checkpoint-10",
+  "note": "Using latest checkpoints (auto-selected)",
+  "dataset": "ankner/gsm8k-CoT test split",
+  "num_samples": 10,
+  "total_eval_time": 95.0965621471405,
+  "avg_time_per_sample": 9.50965621471405,
+  "accuracy": 0.7,
+  "num_correct": 7,
+  "num_wrong": 3,
+  "inference_time": {
+    "mean": 9.50740098953247,
+    "std": 2.994331408684028,
+    "min": 3.685614824295044,
+    "max": 14.182983875274658,
+    "median": 9.887075662612915
+  },
+  "generation_length": {
+    "mean": 162.8,
+    "std": 51.98615200223998,
+    "min": 63,
+    "max": 244,
+    "median": 170.0
+  },
+  "tokens_per_second": {
+    "mean": 17.099942128934146,
+    "median": 17.174328685615524
+  },
+  "format_compliance": {
+    "format_correct_rate": 1.0,
+    "format_correct_count": 10
+  },
+  "accuracy_by_length": {
+    "50-100": {
+      "accuracy": 0.0,
+      "count": 1
+    },
+    "100-200": {
+      "accuracy": 0.8571428571428571,
+      "count": 7
+    },
+    "200-512": {
+      "accuracy": 0.5,
+      "count": 2
+    }
+  },
+  "error_analysis": {
+    "total_errors": 3,
+    "errors_by_format": {
+      "format_correct": 3,
+      "format_incorrect": 0
+    }
+  }
+}

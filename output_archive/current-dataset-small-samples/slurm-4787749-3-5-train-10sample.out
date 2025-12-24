@@ -1,0 +1,117 @@
+==========================================
+SLURM_JOB_ID = 4787749
+SLURM_JOB_NODELIST = d14-16
+TMPDIR = /tmp/SLURM_4787749
+==========================================
+
+Starting at Wed Nov 12 14:27:39 PST 2025
+Running on hosts: d14-16
+Running on 1 nodes.
+Running on 1 processors.
+GPU allocation: 0,1
+Current working directory is /home1/yihelu/csci566
+🚀 Launching 2-GPU DDP training...
+PyTorch version: 2.8.0+cu128
+PyTorch version: 2.8.0+cu128
+CUDA available: True
+CUDA available: True
+CUDA version: 12.8
+CUDA version: 12.8
+GPU count: 2
+GPU count: 2
+  GPU 0: Tesla V100-PCIE-32GB
+  GPU 0: Tesla V100-PCIE-32GB
+  GPU 1: Tesla V100-PCIE-32GB
+  GPU 1: Tesla V100-PCIE-32GB
+
+⏱️  [量化配置] 开始...
+
+⏱️  [量化配置] 开始...
+✅ [量化配置] 完成，耗时: 0.00秒 (0.00分钟)
+
+⏱️  [数据集加载] 开始...
+✅ [量化配置] 完成，耗时: 0.00秒 (0.00分钟)
+
+⏱️  [数据集加载] 开始...
+Using the latest cached version of the dataset since ankner/gsm8k-CoT couldn't be found on the Hugging Face Hub
+Found the latest cached dataset configuration 'default' at /home1/yihelu/.cache/huggingface/datasets/ankner___gsm8k-co_t/default/0.0.0/7d17d50766210693e3f5ea0586393dc0765b266b (last modified on Tue Nov 11 13:38:19 2025).
+Using the latest cached version of the dataset since ankner/gsm8k-CoT couldn't be found on the Hugging Face Hub
+Found the latest cached dataset configuration 'default' at /home1/yihelu/.cache/huggingface/datasets/ankner___gsm8k-co_t/default/0.0.0/7d17d50766210693e3f5ea0586393dc0765b266b (last modified on Tue Nov 11 13:38:19 2025).
+✅ [数据集加载] 完成，耗时: 0.84秒 (0.01分钟)
+
+⏱️  [数据预处理] 开始...
+✅ [数据集加载] 完成，耗时: 0.84秒 (0.01分钟)
+
+⏱️  [数据预处理] 开始...
+✅ [数据预处理] 完成，耗时: 0.01秒 (0.00分钟)
+
+⏱️  [模型加载] 开始...
+✅ [数据预处理] 完成，耗时: 0.01秒 (0.00分钟)
+
+⏱️  [模型加载] 开始...
+`torch_dtype` is deprecated! Use `dtype` instead!
+`torch_dtype` is deprecated! Use `dtype` instead!
+✅ [模型加载] 完成，耗时: 1754.36秒 (29.24分钟)
+✅ [模型加载] 完成，耗时: 1754.36秒 (29.24分钟)
+
+⏱️  [训练器初始化] 开始...
+
+⏱️  [训练器初始化] 开始...
+Detected kernel version 4.18.0, which is below the recommended minimum of 5.5.0; this can cause the process to hang. It is recommended to upgrade the kernel to the minimum version or higher.
+✅ [训练器初始化] 完成，耗时: 0.63秒 (0.01分钟)
+
+================================================================================
+🚀 开始多GPU GRPO 训练...
+🎮 GPU数量: 2
+📊 配置: 10 样本 × 4 生成 = 40 次推理
+💾 总批次大小: 2 × 2 × 2 = 8
+================================================================================
+
+
+⏱️  [GRPO 完整训练] 开始...
+✅ [训练器初始化] 完成，耗时: 0.63秒 (0.01分钟)
+
+================================================================================
+🚀 开始多GPU GRPO 训练...
+🎮 GPU数量: 2
+📊 配置: 10 样本 × 4 生成 = 40 次推理
+💾 总批次大小: 2 × 2 × 2 = 8
+================================================================================
+
+
+⏱️  [GRPO 完整训练] 开始...
+The tokenizer has new PAD/BOS/EOS tokens that differ from the model config and generation config. The model config and generation config were aligned accordingly, being updated with the tokenizer's values. Updated tokens: {'bos_token_id': None, 'pad_token_id': 151643}.
+The tokenizer has new PAD/BOS/EOS tokens that differ from the model config and generation config. The model config and generation config were aligned accordingly, being updated with the tokenizer's values. Updated tokens: {'bos_token_id': None, 'pad_token_id': 151643}.
+  0%|          | 0/5 [00:00<?, ?it/s][rank0]:[W1112 14:59:00.417617429 reducer.cpp:1457] Warning: find_unused_parameters=True was specified in DDP constructor, but did not find any unused parameters in the forward pass. This flag results in an extra traversal of the autograd graph every iteration,  which can adversely affect performance. If your model indeed never has any unused parameters in the forward pass, consider turning this flag off. Note that this warning may be a false positive if your model has flow control causing later iterations to have unused parameters. (function operator())
+[rank1]:[W1112 14:59:00.461813379 reducer.cpp:1457] Warning: find_unused_parameters=True was specified in DDP constructor, but did not find any unused parameters in the forward pass. This flag results in an extra traversal of the autograd graph every iteration,  which can adversely affect performance. If your model indeed never has any unused parameters in the forward pass, consider turning this flag off. Note that this warning may be a false positive if your model has flow control causing later iterations to have unused parameters. (function operator())
+ 20%|██        | 1/5 [01:05<04:23, 65.95s/it] 40%|████      | 2/5 [02:00<02:58, 59.39s/it]                                             {'loss': -0.6402, 'grad_norm': 0.746690571308136, 'learning_rate': 5e-05, 'num_tokens': 4575.0, 'completions/mean_length': 143.9375, 'completions/min_length': 52.75, 'completions/max_length': 218.25, 'completions/clipped_ratio': 0.0, 'completions/mean_terminated_length': 143.9375, 'completions/min_terminated_length': 52.75, 'completions/max_terminated_length': 218.25, 'rewards/reward_func/mean': 0.5, 'rewards/reward_func/std': 0.5386751294136047, 'reward': 0.5, 'reward_std': 0.5386751294136047, 'frac_reward_zero_std': 0.0, 'kl': 0.0, 'entropy': 0.36516208946704865, 'clip_ratio/low_mean': 0.0, 'clip_ratio/low_min': 0.0, 'clip_ratio/high_mean': 0.0, 'clip_ratio/high_max': 0.0, 'clip_ratio/region_mean': 0.0, 'epoch': 0.4}
+ 40%|████      | 2/5 [02:00<02:58, 59.39s/it] 60%|██████    | 3/5 [02:51<01:51, 55.52s/it] 80%|████████  | 4/5 [03:43<00:53, 53.93s/it]                                             {'loss': -0.1294, 'grad_norm': 0.005134714301675558, 'learning_rate': 2.5e-05, 'num_tokens': 9438.0, 'completions/mean_length': 161.4375, 'completions/min_length': 110.5, 'completions/max_length': 213.25, 'completions/clipped_ratio': 0.1875, 'completions/mean_terminated_length': 141.22916793823242, 'completions/min_terminated_length': 110.5, 'completions/max_terminated_length': 173.5, 'rewards/reward_func/mean': 0.6875, 'rewards/reward_func/std': 0.125, 'reward': 0.6875, 'reward_std': 0.125, 'frac_reward_zero_std': 0.75, 'kl': 0.003678183871670626, 'entropy': 0.34997886419296265, 'clip_ratio/low_mean': 0.0, 'clip_ratio/low_min': 0.0, 'clip_ratio/high_mean': 0.0, 'clip_ratio/high_max': 0.0, 'clip_ratio/region_mean': 0.0, 'epoch': 0.8}
+ 80%|████████  | 4/5 [03:43<00:53, 53.93s/it]
+======================================================================
+📊 Reward Statistics (Call #10):
+   Mean: 0.5000 | Std: 0.5000 | Acc: 50.00%
+   Correct: 1/2
+======================================================================
+
+100%|██████████| 5/5 [04:36<00:00, 53.72s/it]/home1/yihelu/.conda/envs/torch-env/lib/python3.12/site-packages/peft/utils/other.py:1228: UserWarning: Unable to fetch remote file due to the following error 429 Client Error: Too Many Requests for url: https://huggingface.co/Qwen/Qwen2.5-Coder-1.5B/resolve/main/config.json (Request ID: Root=1-69151208-7524c9b811ecbca968774ee9;d7359688-aa15-432c-93cb-7ca422bc82df)
+
+We had to rate limit your IP (68.181.55.20). To continue using our service, create a HF account or login to your existing account, and make sure you pass a HF_TOKEN if you're using the API. - silently ignoring the lookup for the file config.json in Qwen/Qwen2.5-Coder-1.5B.
+  warnings.warn(
+/home1/yihelu/.conda/envs/torch-env/lib/python3.12/site-packages/peft/utils/save_and_load.py:286: UserWarning: Could not find a config file in Qwen/Qwen2.5-Coder-1.5B - will assume that the vocabulary was not modified.
+  warnings.warn(
+                                             {'train_runtime': 278.2672, 'train_samples_per_second': 0.036, 'train_steps_per_second': 0.018, 'train_loss': -0.35526787042617797, 'num_tokens': 11879.0, 'completions/mean_length': 178.125, 'completions/min_length': 110.0, 'completions/max_length': 224.0, 'completions/clipped_ratio': 0.25, 'completions/mean_terminated_length': 156.625, 'completions/min_terminated_length': 110.0, 'completions/max_terminated_length': 202.5, 'rewards/reward_func/mean': 0.125, 'rewards/reward_func/std': 0.25, 'reward': 0.125, 'reward_std': 0.25, 'frac_reward_zero_std': 0.5, 'kl': 0.007052889559417963, 'entropy': 0.39861008524894714, 'clip_ratio/low_mean': 0.0, 'clip_ratio/low_min': 0.0, 'clip_ratio/high_mean': 0.0, 'clip_ratio/high_max': 0.0, 'clip_ratio/region_mean': 0.0, 'epoch': 1.0}
+100%|██████████| 5/5 [04:38<00:00, 53.72s/it]100%|██████████| 5/5 [04:38<00:00, 55.65s/it]
+✅ [GRPO 完整训练] 完成，耗时: 282.68秒 (4.71分钟)
+
+✅ 训练完成！检查点保存在: qwen_grpo_lora_multigpu/
+✅ [GRPO 完整训练] 完成，耗时: 282.68秒 (4.71分钟)
+
+💾 Final reward logs saved to: qwen_grpo_lora_multigpu/reward_statistics.json
+📊 Total reward function calls: 10
+📊 Total log entries: 10
+
+✅ 训练完成！检查点保存在: qwen_grpo_lora_multigpu/
+[rank0]:[W1112 15:02:37.460792816 ProcessGroupNCCL.cpp:1538] Warning: WARNING: destroy_process_group() was not called before program exit, which can leak resources. For more info, please see https://pytorch.org/docs/stable/distributed.html#shutdown (function operator())
+
+Program finished with exit code 0 at: Wed Nov 12 15:02:40 PST 2025
+

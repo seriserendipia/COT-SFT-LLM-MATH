@@ -1,0 +1,89 @@
+==========================================
+SLURM_JOB_ID = 4792055
+SLURM_JOB_NODELIST = b11-11
+TMPDIR = /tmp/SLURM_4792055
+==========================================
+
+==========================================
+🚀 GRPO Model Inference Job Starting
+==========================================
+Job started at: Wed Nov 12 17:30:08 PST 2025
+Running on hosts: b11-11
+Running on 1 nodes
+Running on 1 processors
+GPU allocation: 0
+==========================================
+
+Current working directory: /home1/yihelu/csci566
+📊 Starting GRPO model inference...
+PyTorch version: 2.8.0+cu128
+CUDA available: True
+CUDA version: 12.8
+GPU count: 1
+GPU name: NVIDIA A40
+Loading dataset...
+Map:   0%|          | 0/10 [00:00<?, ? examples/s]Map: 100%|██████████| 10/10 [00:00<00:00, 1245.12 examples/s]
+`torch_dtype` is deprecated! Use `dtype` instead!
+Loaded 10 test samples
+Loading base model...
+Loading GRPO LoRA adapter...
+Found 2 checkpoints, using latest: qwen_grpo_lora_multigpu/checkpoint-462
+✅ Found GRPO LoRA adapter at: /home1/yihelu/csci566/qwen_grpo_lora_multigpu/checkpoint-462
+
+======================================================================
+🚀 Starting GRPO model inference...
+📊 Test samples: 10
+🎯 Evaluation metric: Accuracy
+🔧 Generation mode: Deterministic (temperature=0.0)
+======================================================================
+
+Evaluating:   0%|          | 0/10 [00:00<?, ?it/s]The following generation flags are not valid and may be ignored: ['temperature']. Set `TRANSFORMERS_VERBOSITY=info` for more details.
+Evaluating:  10%|█         | 1/10 [00:06<01:00,  6.68s/it]Evaluating:  20%|██        | 2/10 [00:14<00:58,  7.29s/it]Evaluating:  30%|███       | 3/10 [00:22<00:55,  7.88s/it]Evaluating:  40%|████      | 4/10 [00:27<00:40,  6.74s/it]Evaluating:  50%|█████     | 5/10 [00:35<00:34,  7.00s/it]Evaluating:  60%|██████    | 6/10 [00:39<00:23,  5.89s/it]Evaluating:  70%|███████   | 7/10 [00:53<00:25,  8.56s/it]Evaluating:  80%|████████  | 8/10 [01:01<00:17,  8.54s/it]Evaluating:  90%|█████████ | 9/10 [01:11<00:09,  9.01s/it]Evaluating: 100%|██████████| 10/10 [01:20<00:00,  8.83s/it]Evaluating: 100%|██████████| 10/10 [01:20<00:00,  8.02s/it]
+
+Progress: 5/10, Accuracy so far: 0.6000 (60.00%)
+
+Progress: 10/10, Accuracy so far: 0.6000 (60.00%)
+
+======================================================================
+📈 Final Evaluation Results (GRPO Model):
+======================================================================
+Total samples: 10
+Correct predictions: 6
+Wrong predictions: 4
+Accuracy: 0.6000 (60.00%)
+======================================================================
+
+✅ Inference results saved to: inference_results_grpo/inference_results.json
+✅ Evaluation metrics saved to: inference_results_grpo/evaluation_metrics.json
+✅ Wrong cases saved to: inference_results_grpo/wrong_cases.json
+   Total wrong cases: 4
+
+======================================================================
+📝 Sample Results:
+======================================================================
+
+✅ Correct Example (Index 0):
+Question: A robe takes 2 bolts of blue fiber and half that much white fiber.  How many bolts in total does it ...
+Predicted: 3
+Ground Truth: 3
+
+❌ Wrong Example (Index 1):
+Question: James decides to run 3 sprints 3 times a week.  He runs 60 meters each sprint.  How many total meter...
+Predicted: 3780
+Ground Truth: 540
+Full Response: <think>
+1. James runs 3 sprints each day.
+2. He runs 3 sprints a day, so he runs 3 × 3 = 9 sprints a day.
+3. Each sprint is 60 meters, so he runs 9 × 60 = 540 meters a day.
+4. He runs 540 meters a day...
+
+======================================================================
+🎉 GRPO Model Inference and Evaluation Completed!
+======================================================================
+
+==========================================
+✅ Inference completed successfully!
+📁 Results saved in: inference_results_grpo/
+Job finished at: Wed Nov 12 17:33:45 PST 2025
+==========================================
+

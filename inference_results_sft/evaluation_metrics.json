@@ -1,0 +1,8 @@
+{
+  "total_samples": 1316,
+  "correct_predictions": 805,
+  "accuracy": 0.6117021276595744,
+  "model_path": "qwen_peft_sft_lora/checkpoint-1867",
+  "dataset": "ankner/gsm8k-CoT",
+  "split": "test"
+}

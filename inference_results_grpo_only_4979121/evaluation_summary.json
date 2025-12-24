@@ -1,0 +1,58 @@
+{
+  "training_job_id": "4979121",
+  "timestamp": "2025-11-26T10:48:49.126420",
+  "eval_mode": "grpo_only (ablation study)",
+  "model_architecture": "Base + GRPO LoRA (without SFT)",
+  "grpo_adapter_path": "./qwen_sft_grpo_lora_4979121/checkpoint-3732",
+  "note": "GRPO was trained on (Base+SFT) but evaluated on Base only to test independent capability",
+  "dataset": "ankner/gsm8k-CoT test split",
+  "num_samples": 1316,
+  "total_eval_time": 16403.49420452118,
+  "avg_time_per_sample": 12.464661249636155,
+  "accuracy": 0.682370820668693,
+  "num_correct": 898,
+  "num_wrong": 418,
+  "inference_time": {
+    "mean": 12.463320476305883,
+    "std": 5.005812555989051,
+    "min": 2.8830184936523438,
+    "max": 29.736714601516724,
+    "median": 11.816483855247498
+  },
+  "generation_length": {
+    "mean": 216.12310030395136,
+    "std": 86.97276264474901,
+    "min": 50,
+    "max": 512,
+    "median": 205.0
+  },
+  "tokens_per_second": {
+    "mean": 17.33521181046139,
+    "median": 17.368828405378405
+  },
+  "format_compliance": {
+    "format_correct_rate": 0.9688449848024316,
+    "format_correct_count": 1275
+  },
+  "accuracy_by_length": {
+    "50-100": {
+      "accuracy": 0.9137931034482759,
+      "count": 58
+    },
+    "100-200": {
+      "accuracy": 0.7622377622377622,
+      "count": 572
+    },
+    "200-512": {
+      "accuracy": 0.6104477611940299,
+      "count": 670
+    }
+  },
+  "error_analysis": {
+    "total_errors": 418,
+    "errors_by_format": {
+      "format_correct": 392,
+      "format_incorrect": 26
+    }
+  }
+}

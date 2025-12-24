@@ -1,0 +1,18 @@
+{
+  "start_time": "2025-11-20T16:57:07.332380",
+  "model_id": "Qwen/Qwen2.5-Coder-1.5B",
+  "sft_adapter_path": "./qwen_peft_sft_lora/checkpoint-1867",
+  "output_dir": "./qwen_sft_grpo_lora",
+  "num_samples": 10,
+  "num_epochs": 1,
+  "batch_size": 2,
+  "gradient_accumulation_steps": 2,
+  "learning_rate": 5e-06,
+  "beta": 0.01,
+  "num_generations": 4,
+  "max_completion_length": 128,
+  "total_reward_calls": 10,
+  "final_avg_accuracy": 0.25,
+  "final_max_accuracy": 0.75,
+  "final_min_accuracy": 0.0
+}
