@@ -1,0 +1,61 @@
+Thanks again for your interest in using Cloud TPUs to accelerate your machine learning research. Your Google Cloud project tpu-project-490119 now has access to the following quota free of charge for 30 days:
+
+64 spot Cloud TPU v5e chips in zone us-central1-a
+32 spot Cloud TPU v4 chips in zone us-central2-b
+32 on-demand Cloud TPU v4 chips in zone us-central2-b
+64 spot Cloud TPU v5e chips in zone europe-west4-b
+64 spot Cloud TPU v6e chips in zone europe-west4-a
+64 spot Cloud TPU v6e chips in zone us-east1-d
+IMPORTANT: This free 30-day trial is only available for new Cloud TPUs you create in the zones listed above. To avoid charges, please be sure to create your Cloud TPUs in the appropriate zone.
+
+While your Cloud TPUs are free, you'll still be charged for the rest of the GCP services you use. If you have a new account, Google Cloud's $300 USD introductory credit may completely offset these costs, and you can minimize costs even more by utilizing the new Cloud TPU VM architecture.
+
+Please note that demand for Cloud TPUs is high, so we can't guarantee you'll get to use all of your TPU quota. Google reserves the right to reclaim TRC quota and TRC Cloud TPU capacity at any time.
+
+Get started
+To get started, please follow our QuickStart guide. After you're up and running, we recommend that you skim our online documentation and then follow a tutorial to work with one of the high-performance open-source reference models listed below as a starting point. If you are using Cloud TPU v4, please check out the user's guide.
+
+Please note the following:
+
+TRC quotas are intended to be utilized with the TPU VM architecture and the Queued Resource API
+Be sure that you are using the correct flags for your quota type (for reference, see on-demand or preemptible)
+If you have access to both on-demand and preemptible quotas, we recommend preferring on-demand and falling back to preemptible if/when on-demand is not available
+If you have access to v2-8 and/or v3-8 quotas, please be aware that these individual devices cannot be used in pod configurations
+If you encounter an error message indicating that your quota is exhausted, confirm that you have deleted any unused Cloud TPUs and/or Queued Resources that may still be consuming quota
+Reference models
+We highly recommend that you start with one of these optimized reference models to get familiar with the platform before building a new model from scratch or porting an existing model.
+
+After you work with a reference model and see Cloud TPUs in action, our performance guide, profiling tools guide, and troubleshooting guide can give you in-depth technical information to help you create and optimize machine learning models on your own using high-level TensorFlow APIs.
+
+More about Cloud TPUs
+Cloud TPU is designed to run cutting-edge machine learning models with AI services on Google Cloud, and its custom high-speed network offers over 100 petaflops of performance in a single pod—enough computational power to create the next research breakthrough.
+Training machine learning models is like compiling code: you need to update often, and you want to do so as efficiently as possible. ML models need to be trained over and over as apps are built, deployed, and refined. Cloud TPU's robust performance and low cost make it ideal for machine learning teams looking to iterate quickly and frequently on their solutions.
+You can build your own machine learning-powered solutions for many real-world use cases. Just bring your data, download a Google-optimized reference model, and start training.
+Cloud TPU Videos and Articles
+To learn more about Cloud TPUs, please check the following helpful sources:
+
+Cloud TPU v4 records fastest training times on five MLPerf 2.0 benchmarks (June 2022)
+Snap Inc. adopts Google Cloud TPU for deep learning recommendation models (May 2022)
+Google Cloud unveils world's largest publicly available ML hub with Cloud TPU v4, 90% carbon-free energy (May 2022)
+Cloud TPU VMs are generally available (May 2022)
+Google showcases Cloud TPU v4 Pods for large model training (Dec 2021)
+Cloud TPU v4: Fast, flexible, and easy-to-use ML accelerators (Nov 2021)
+PyTorch users may find the following blog series helpful:
+
+PyTorch/XLA: Performance debugging on Cloud TPU VM: Part I
+PyTorch/XLA: Performance debugging on Cloud TPU VM: Part II
+PyTorch/XLA: Performance debugging on Cloud TPU VM: Part III
+Program requirements
+As a reminder, participants in the TRC program are expected to:
+
+Share their TRC-supported research with the world through peer-reviewed publications, open source code, blog posts, or other means
+Share detailed feedback with Google to help us improve the TRC program and the underlying Cloud TPU platform over time
+Conduct their research in accordance with the Google AI Principles
+Accept Google's Terms and Conditions
+Acknowledge that their information will be used in accordance with Google's Privacy Policy
+Get help and give us feedback
+If you don't find help with a question or issue in our troubleshooting guide, please check out our FAQ or email us at trc-support@google.com. You might also find the #tpu-research-cloud channel on the Google Developer Community Discord server to be a helpful way to engage with the TRC community. We appreciate any feedback you can share to help improve our Cloud TPU accelerators or the TRC program.
+
+We hope you enjoy using your free Cloud TPUs!
+
+-- The TRC Team

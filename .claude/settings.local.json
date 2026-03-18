@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ls -lh \"D:\\\\PythonEx\\\\cs566_group_project\"/*.py)",
+      "Bash(ls -1 *.py)",
+      "WebSearch",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "WebFetch(domain:opensource.googleblog.com)",
+      "WebFetch(domain:tunix.readthedocs.io)",
+      "WebFetch(domain:developers.googleblog.com)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:docs.cloud.google.com)",
+      "WebFetch(domain:pypi.org)",
+      "WebFetch(domain:jax.readthedocs.io)",
+      "WebFetch(domain:docs.jax.dev)",
+      "Bash(gcloud compute:*)"
+    ]
+  }
+}

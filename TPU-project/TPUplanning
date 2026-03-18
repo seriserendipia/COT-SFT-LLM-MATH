@@ -1,0 +1,363 @@
+# TPU 迁移计划：Qwen2.5 + GSM8K-CoT + Tunix/JAX
+
+> 决策记录 + 可执行计划 + 代码结构。调研过程已归档到 git history。
+
+---
+
+## 0. 每日工作流（TRC TPU VM）
+
+### 每天开始工作
+
+```bash
+# 1. 创建 TPU VM（第一次用，或之前 delete 了）
+create_tpu.bat                    # Windows 本地运行，自动尝试 on-demand > spot
+
+# 2. 如果 VM 已存在但停了，直接开机
+gcloud compute tpus tpu-vm start tpu-dev --zone=ZONE
+
+# 3. 获取 IP（每次 start 后 IP 可能变）
+gcloud compute tpus tpu-vm describe tpu-dev --zone=ZONE --format="get(networkEndpoints[0].accessConfig.externalIp)"
+
+# 4. 更新本地 ~/.ssh/config 的 HostName 为新 IP
+
+# 5. VS Code → Ctrl+Shift+P → Remote-SSH: Connect to Host → tpu-dev
+```
+
+### 每天结束工作
+
+```bash
+# stop = 保留磁盘和环境，不计 TPU 费用（仍计少量磁盘费）
+gcloud compute tpus tpu-vm stop tpu-dev --zone=ZONE
+
+# 如果彻底不用了（环境会丢）
+gcloud compute tpus tpu-vm delete tpu-dev --zone=ZONE
+```
+
+### 常用查询
+
+```bash
+# 查看 VM 状态（READY / STOPPED / ...）
+gcloud compute tpus tpu-vm describe tpu-dev --zone=ZONE --format="get(state)"
+
+# 列出所有 TPU VM
+gcloud compute tpus tpu-vm list --zone=us-central2-b
+
+# 列出 queued resources
+gcloud compute tpus queued-resources list --zone=us-central2-b
+```
+
+> **ZONE 取决于创建时拿到的区域。** on-demand v4 固定是 `us-central2-b`，spot 可能在其他区。
+> 创建成功后脚本会打印 zone，记住它用于后续所有命令。
+
+### Spot 实例使用指南
+
+**什么是 spot：** 用 Google 的闲置容量，免费但随时可能被抢占（通常几小时到一天）。
+
+**和 on-demand 的区别：**
+
+| | on-demand | spot |
+|---|---|---|
+| 稳定性 | 不会被中断 | 随时可能被抢占 |
+| stop/start | 支持（保留磁盘和环境） | **不支持 stop**，只能 delete 重建 |
+| 磁盘 | stop 后磁盘保留 | delete 后磁盘丢失 |
+| 适合 | 长时间稳定训练 | 短时间开发调试 |
+
+**spot 每日工作流（和 on-demand 不同！）：**
+
+```bash
+# 开始工作：创建新 VM（每次都是全新的）
+create_tpu.bat
+
+# 获取 IP → 更新 SSH config → VS Code 连接
+gcloud compute tpus tpu-vm describe tpu-dev --zone=us-central2-b --format="get(networkEndpoints[0].accessConfig.externalIp)"
+
+# SSH 进去后要重新配环境（因为是新 VM）
+# 如果用了 startup script 可以自动化，否则手动跑一次性配置
+
+# 结束工作：直接 delete（spot 不支持 stop）
+gcloud compute tpus tpu-vm delete tpu-dev --zone=us-central2-b --quiet
+```
+
+**spot 生存策略：**
+1. **代码放 GitHub**，不存本地 → delete 后 clone 就恢复
+2. **checkpoint 存 GCS bucket**，不存 VM 磁盘 → `gsutil cp` 上传下载
+3. **写一个环境初始化脚本**（setup_env.sh），每次 create 后 SSH 进去跑一次
+4. **勤存 checkpoint**，被抢占时最多丢一个 checkpoint 间隔的进度
+5. **被抢占后**：重新 `create_tpu.bat` → SSH → 从最近 checkpoint 恢复
+
+**实际影响：** 对于我们的场景（PoC + 短训练），spot 完全够用。
+单次训练 <30 分钟，被抢占概率很低。
+
+### TRC 免费资源总览
+
+| 资源 | 区域 | 类型 | 实测结果 |
+|---|---|---|---|
+| v4-8 | us-central2-b | **on-demand** | 免费但目前无容量 |
+| v4-8 | us-central2-b | **spot** | 免费，可用 |
+| v5e-1 | us-central1-a | spot only | 免费（无 on-demand 权限）|
+| v5e-1 | europe-west4-b | spot only | 免费 |
+| v6e-1 | europe-west4-a | spot only | 免费 |
+| v6e-1 | us-east1-d | spot only | 免费 |
+
+**实测结论：只有 v4 有 on-demand 权限，v5e/v6e 只有 spot。**
+当前 on-demand v4 无容量，实际用 spot v4。全部免费 30 天。
+其他 GCP 服务（磁盘、网络）会收费，新账号有 $300 抵扣。
+
+### 一次性配置
+
+**VS Code Remote-SSH（~/.ssh/config）：**
+```
+Host tpu-dev
+    HostName <IP>
+    User <Google 账号用户名>
+    IdentityFile C:\Users\<用户名>\.ssh\google_compute_engine
+    StrictHostKeyChecking no
+```
+SSH key 由首次 `gcloud compute tpus tpu-vm ssh tpu-dev --zone=ZONE` 自动生成。
+
+**TPU VM 环境（SSH 进去后执行一次）：**
+```bash
+sudo apt update && sudo apt install -y git python3-pip python3-venv
+python3 -m venv ~/tpu-env && source ~/tpu-env/bin/activate
+pip install jax[tpu] -f https://storage.googleapis.com/jax-releases/libtpu_releases.html
+pip install "google-tunix[prod]" jupytext datasets transformers
+python3 -c "import jax; print(jax.devices()); from tunix.models.automodel import AutoModel; print('OK')"
+git clone <repo URL> ~/project
+```
+
+### 常见问题速查
+
+| 问题 | 解决 |
+|---|---|
+| `RESOURCE_EXHAUSTED` 创建失败 | `tpu-vm list` 检查残留资源，删掉再创建 |
+| SSH 超时 | VM 没 start 或 IP 变了，重新 describe 获取新 IP |
+| JAX 看不到 TPU | `export TPU_LIBRARY_PATH=/lib/libtpu.so` |
+| pip 超时 | 换源 `-i https://pypi.tuna.tsinghua.edu.cn/simple/` |
+| spot VM 被抢占 | 正常现象，重新 `create_tpu.bat` |
+
+---
+
+## 1. 决策摘要
+
+| 决策项 | 结论 | 理由 |
+|---|---|---|
+| 训练框架 | **Tunix (JAX/Flax)** | TPU 原生栈，官方支持 SFT+GRPO+LoRA |
+| GPU vs TPU 对比 | **统一 Tunix/JAX** | 纯硬件对比，控制变量 |
+| 第一版范围 | **SFT only** | 降低首版复杂度，30 分钟约束 |
+| 模型 | `Qwen/Qwen2.5-Coder-1.5B`，fallback `Qwen2.5-1.5B` | Tunix 支持 Qwen2.5 家族 |
+| 数据 | `ankner/gsm8k-CoT`，500 训练 / 200 评估 | 满足 30 分钟约束 |
+| LoRA 库 | **qwix** | Tunix 原生 LoRA/QLoRA |
+| 运行环境 | Colab（交付）+ GCP TRC v4（**主力开发**） | 代码完全通用 |
+
+### 现有栈 → Tunix 映射
+
+| 现有（GPU） | 迁移后（Tunix/JAX） |
+|---|---|
+| `transformers.AutoModelForCausalLM` | `tunix.models.automodel.AutoModel` |
+| `peft.LoraConfig` + `PeftModel` | `qwix.LoraProvider` + `qwix.apply_lora_to_model` |
+| `trl.SFTTrainer` | `tunix.sft.peft_trainer.PeftTrainer` |
+| `bitsandbytes` 4-bit | `qwix` NF4 |
+| `optim="paged_adamw_8bit"` | `optax.adamw` |
+| `torch.cuda` / `device_map` | `jax.make_mesh` + 自动设备检测 |
+| `model.generate()` | `tunix.generate.sampler.Sampler` |
+
+### 可保留不变
+
+数据集 `ankner/gsm8k-CoT` / prompt 协议 `<think>` + `<ans>` / 评估逻辑 / 实验设计
+
+---
+
+## 2. 代码结构
+
+### 文件组织
+
+```
+TPU-project/
+├── tpu_gpu_comparison.py    ← 源文件（唯一编辑的文件，# %% cell 格式）
+├── tpu_gpu_comparison.ipynb ← 生成物（jupytext 转换，不手动编辑）
+├── create_tpu.sh            ← TPU VM 创建脚本
+├── instructor_notes.md      ← 教师讲解 + 报错手册
+├── results_tpu.json / results_gpu.json / comparison.png ← 预录结果
+└── TPUplanning              ← 本文件
+```
+
+**核心原则：绝不直接编辑 `.ipynb`。** 编辑 .py → `jupytext --to notebook` → 生成 .ipynb。
+
+### Cell 结构
+
+```
+Cell 0:  [markdown] 实验说明
+Cell 1:  环境安装与设备检测 → DEVICE_TYPE, IS_COLAB
+Cell 2:  Drive 挂载与路径配置 → SAVE_DIR
+Cell 3:  超参数配置（学生可改区）
+Cell 4:  数据加载与预处理 → tokenizer, train_ds, eval_ds
+Cell 5:  模型加载 → mesh, model, model_path
+Cell 6:  LoRA 注入 → lora_model
+Cell 7:  数据 pipeline（Tunix 格式）
+Cell 8:  训练执行 + 计时 → metrics
+Cell 9:  推理评估
+Cell 10: 结果保存
+Cell 11: GPU/TPU 对比可视化
+Cell 12: [markdown] 教学讨论
+```
+
+### 数据流
+
+```
+ankner/gsm8k-CoT → format_sft() → tokenize() → build_tunix_batch()
+→ PeftTrainer.train() → Sampler() → extract_answer() → results_{device}.json
+```
+
+### 环境差异处理
+
+```python
+IS_COLAB = 'COLAB_RELEASE_TAG' in os.environ
+if IS_COLAB:
+    !pip install "google-tunix[prod]" -q
+else:
+    !pip install jax[tpu] -f https://storage.googleapis.com/jax-releases/libtpu_releases.html -q
+    !pip install "google-tunix[prod]" -q
+```
+
+Qwen2.5-1.5B BF16 占用 ~3GB + LoRA ~50MB + activations ≈ 6-8GB，16GB HBM 安全可行。
+
+---
+
+## 3. 需要 PoC 确认的细节
+
+| # | 问题 | 确认方法 | 备选 |
+|---|---|---|---|
+| P1 | Tunix 能否加载 Qwen2.5-Coder-1.5B | `from_pretrained` | fallback Qwen2.5-1.5B |
+| P2 | LoRA module_path | 打印模型结构 | `".*"` 全量匹配 |
+| P3 | Tunix data API 格式 | 参考 `tunix.examples.data` | 手写 batch iterator |
+| P4 | PeftTrainer step-level callback | 查 API 源码 | 只记录总时间 |
+| P5 | Tunix tokenizer vs HF tokenizer | 实测 | 分别用 |
+| P6 | Sampler 在 GPU (JAX CUDA) 能否工作 | GPU runtime 实测 | GPU 端跳过推理 |
+| P7 | GPU 上 XLA 编译时间 | 实测 MVP 20 步 | 减 seq_len 到 256 |
+
+---
+
+## 4. 前置检查清单
+
+**环境：** `jax.devices()` 返回 TpuDevice/GpuDevice | JAX >= 0.6.0 | Tunix/qwix 可导入
+
+**模型：** AutoModel.from_pretrained 成功 | HBM 占用 < 12GB | trainable_params > 0
+
+**数据：** `load_dataset("ankner/gsm8k-CoT")` 成功 | 95% token 长度 < MAX_SEQ_LEN
+
+---
+
+## 5. 迁移路线
+
+### Phase 0：环境确认（Day 1 上午，~3h）
+- 三环境安装 Tunix，运行检查清单 §4
+- **产出：** 环境兼容性矩阵
+
+### Phase 1：模型 + 数据 PoC（Day 1 下午 - Day 2 上午，~4h）
+- 加载模型（P1）→ 打印结构确认 LoRA path（P2）→ 数据转换（P3）→ 10 step 训练
+- **产出：** 模型加载日志 + 数据样例 + 10 step loss
+
+### Phase 2：完整 SFT 闭环（Day 2 下午 - Day 3 上午，~6h）
+- LoRA + 200 step 训练 → checkpoint → 推理评估
+- **产出：** 训练日志 + checkpoint + evaluation_results.json
+
+### Phase 3：GPU 对比 + 可视化（Day 3 下午，~4h）
+- 切 GPU runtime，同一代码运行 → 生成对比图表
+- **产出：** results_gpu.json + results_tpu.json + comparison.png
+
+---
+
+## 6. 实验设计
+
+### 对比矩阵
+
+| 硬件 | 环境 | HBM | BF16 算力 |
+|---|---|---|---|
+| GPU T4 | Colab | 16 GB | ~65 TFLOPS |
+| TPU v5e-1 | Colab | 16 GB | ~197 TFLOPS |
+
+Batch size 维度：bs=1/ga=8, bs=2/ga=4, bs=4/ga=2（有效 batch 均为 8）
+
+### 指标
+
+first_step_time / steady_state_step_time / total_wall_time / throughput_tokens_per_sec / final_train_loss / eval_accuracy / model_load_time
+
+### 图表
+
+1. 训练时间 + Step Time + 准确率 bar chart（三图并排）
+2. Step Time 曲线（GPU vs TPU，重点看第一步 spike）
+3. （选做）Batch Size vs Throughput
+
+---
+
+## 7. 教学设计
+
+**学生任务：** 打开 notebook → GPU Run All (~20min) → TPU Run All (~15min) → 看对比图 → 回答 3 个思考题
+
+**教师 8 要点：** 为什么不用 PyTorch / 第一步慢（JIT）/ TPU 稳态快（MXU）/ 准确率应接近 / LoRA / mesh+sharding / TPU 何时更值 / Tunix 存在意义
+
+**常见报错：** No TPU → 选 TPU runtime | OOM → bs=1 | No tunix → 跑 Cell 1 | NaN loss → lr=5e-5 | XLA 慢 → 正常等 | HBM exhausted → rank=8
+
+---
+
+## 8. 风险 Top 8
+
+| 风险 | 概率 | 兜底 |
+|---|---|---|
+| Qwen2.5-Coder 不被 Tunix 识别 | 中 | fallback Qwen2.5-1.5B |
+| LoRA module_path 不匹配 | 中 | `".*"` 全量 |
+| GPU XLA 编译极慢 (>10min) | 中高 | 减 seq_len；作教学讨论 |
+| Tunix data API 不兼容 | 中 | 手写 batch iterator |
+| Colab TPU 配额用完 | 中 | 用 TRC v4 或预录结果 |
+| Sampler 在 GPU 不工作 | 低 | 跳过推理 |
+| JAX/Tunix 版本冲突 | 低 | 固定版本 |
+| TPU 完全不可用 | 低 | 真实 GPU + 预录 TPU |
+
+---
+
+## 9. 一周时间表
+
+| Day | 上午 | 下午 | DoD |
+|---|---|---|---|
+| 1 | Phase 0: 环境检查 | Phase 1: 模型 + 10 step | 环境通过 + loss 有数字 |
+| 2 | Phase 1: 数据 + LoRA | Phase 2: 200 step | trainable_params > 0 + checkpoint |
+| 3 | Phase 2: 推理评估 | Phase 3: GPU 对比 | accuracy + 对比表 |
+| 4 | 教学内容 + jupytext | 端到端测试 | < 30 分钟全流程 |
+| 5 | 预录 fallback 结果 | 最终检查 | 交付包完整 |
+
+---
+
+## 10. 交付清单
+
+| 文件 | 性质 | 验收 |
+|---|---|---|
+| `tpu_gpu_comparison.py` | 源文件 (git tracked) | cell.py 格式，语法正确 |
+| `tpu_gpu_comparison.ipynb` | 生成物 (.gitignore) | Colab GPU/TPU 各跑通，< 30 min |
+| `instructor_notes.md` | 文档 | 8 要点 + 报错手册 |
+| `results_tpu/gpu.json` | 预录数据 | 含所有指标 |
+| `comparison.png` | 预录图表 | 对比图 |
+
+---
+
+## 11. 30 分钟 MVP
+
+```python
+MVP_MODE = True
+TRAIN_SAMPLES, EVAL_SAMPLES, NUM_TRAIN_STEPS = 50, 20, 20
+MAX_SEQ_LEN, LORA_RANK = 256, 8
+```
+
+时间预算（~15 min）：安装 2 + 数据 1 + 模型 3-5 + LoRA 1 + 训练 3-5 + 评估 2-3
+
+Checklist: 安装无报错 / 模型加载 / trainable_params > 0 / 20 步完成 / accuracy 有数字 / JSON 保存
+
+---
+
+## 12. 开发到交付的方案总览
+
+| | TRC SSH（主力开发） | Colab 扩展（验证） | GitHub CI + Badge（交付） |
+|---|---|---|---|
+| TPU | TRC v4 (32GB) | Colab v5e (16GB) | 学生选 |
+| 稳定性 | on-demand，不被抢占 | 共享池，可能断 | - |
+| 时间限制 | 无 | 12h/session | - |
+| 适用阶段 | Day 1-3 开发 | Day 4 验证 | 交付 |
