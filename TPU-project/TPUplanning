@@ -74,8 +74,13 @@ gcloud compute tpus tpu-vm describe tpu-dev --zone=us-central2-b --format="get(n
 # SSH 进去后要重新配环境（因为是新 VM）
 # 如果用了 startup script 可以自动化，否则手动跑一次性配置
 
-# 结束工作：直接 delete（spot 不支持 stop）
-gcloud compute tpus tpu-vm delete tpu-dev --zone=us-central2-b --quiet
+# 结束工作：
+# 停机（保留磁盘和环境，不计 TPU 费用）
+gcloud compute tpus tpu-vm stop tpu-dev --zone=us-central2-b
+
+# 重新开机
+gcloud compute tpus tpu-vm start tpu-dev --zone=us-central2-b
+
 ```
 
 **spot 生存策略：**
@@ -116,14 +121,20 @@ Host tpu-dev
 SSH key 由首次 `gcloud compute tpus tpu-vm ssh tpu-dev --zone=ZONE` 自动生成。
 
 **TPU VM 环境（SSH 进去后执行一次）：**
+> **重要：必须使用 Python 3.11+，VM 默认 python3 是 3.10。**
 ```bash
-sudo apt update && sudo apt install -y git python3-pip python3-venv
-python3 -m venv ~/tpu-env && source ~/tpu-env/bin/activate
-pip install jax[tpu] -f https://storage.googleapis.com/jax-releases/libtpu_releases.html
-pip install "google-tunix[prod]" jupytext datasets transformers
+sudo apt update && sudo apt install -y git python3-pip python3.11-venv
+python3.11 -m venv ~/tpu-env-311 && source ~/tpu-env-311/bin/activate
+pip install --upgrade pip
+pip install "jax[tpu]==0.8.1" -f https://storage.googleapis.com/jax-releases/libtpu_releases.html
+pip install "google-tunix[prod]" datasets transformers importlib_resources
+# ⚠️ JAX 版本必须 pin 0.8.1！Tunix 基于 0.8.x 测试，0.9.x 有 sharding breaking change
+# 详见 tunix_qwen2_sharding_bug.md
 python3 -c "import jax; print(jax.devices()); from tunix.models.automodel import AutoModel; print('OK')"
 git clone <repo URL> ~/project
 ```
+> 之后每次 SSH 登录都要先 `source ~/tpu-env-311/bin/activate`
+> 旧的 `~/tpu-env`（Python 3.10）已删除，不再使用
 
 ### 常见问题速查
 
@@ -135,6 +146,47 @@ git clone <repo URL> ~/project
 | pip 超时 | 换源 `-i https://pypi.tuna.tsinghua.edu.cn/simple/` |
 | spot VM 被抢占 | 正常现象，重新 `create_tpu.bat` |
 
+### Colab 免费版 TPU 现状（2026-03 调研）
+
+#### 官方口径
+
+1. **免费资源不保证供应。** Colab FAQ 明确写明：免费版资源不是 guaranteed，usage limits、idle timeout、maximum lifetime、可分配到的 GPU/TPU 类型都会随时间变化。
+2. **免费版 TPU 类型会变。** FAQ 没承诺固定型号；官方只说 GPU/TPU types available in Colab vary over time。
+3. **免费版运行时会被提前终止。** 官方给出的上限是“最多 12 小时”，但同时强调实际时长取决于 availability 和 usage patterns。
+4. **旧示例文档有滞后。** 官方 `TPUs in Colab` 示例 notebook 仍写着“选择 TPU v2”并假设有 8 个 device，这更像历史示例，不应再当成免费版当前默认硬件事实。
+
+#### 官方社区 / 开发者讨论信号
+
+1. **免费层 TPU 已从 v2-8 迁到 v5e-1。** Colab 官方在 `googlecolab/colabtools` 的公告 issue #5566（2025-08-29）明确宣布：免费层退役 TPU v2-8，改为 TPU v5e-1；到 2025 年 9 月后，免费层目标状态是只提供 v5e-1。
+2. **因此当前默认预期应是 `TPU v5e-1`，不是 `TPU v2-8`。** 也就是说，后续面向学生的 Colab 免费版实验，应按**单 chip v5e-1** 去设计，而不是按 8-chip v2-8 mesh 设计。
+3. **可用性是“部分时间可用”，不是“稳定可用”。** 官方 issue 列表里 TPU 相关问题长期高频，包括：连不上 TPU、卡在 `Allocating` / `Connecting`、账号之间分配结果不同。
+4. **稳定性受账号 / 区域 / 时段影响。** 社区反馈里可以看到：有人能拿到，有人同一时期拿不到；官方回复通常是“资源不保证”或要求通过 in-product feedback 按账号排查，而不是给出统一 SLA。
+5. **结论：免费 Colab TPU 更像 opportunistic bonus，不是课程级可靠基础设施。** 适合个人短实验、演示、补跑；不适合把全班同步成功率押在它上面。
+
+#### 对项目规模的直接影响
+
+| 场景 | 规划假设 | 项目约束 |
+|---|---|---|
+| 学生使用 Colab 免费版，成功拿到 TPU | **通常按 `v5e-1` 单芯片** 估计 | 不做 8-way mesh / model parallel；优先单卡 LoRA + 小样本 SFT |
+| 学生使用 Colab 免费版，但 TPU 分配失败 | 视为正常情况，不是个例 | Notebook 必须提供 GPU/CPU fallback，且能直接读取预录结果 |
+| 整班同时上课 | 高并发下 TPU 更不稳定 | 不把“每个学生都现场拿到 TPU”作为验收条件 |
+| 课堂演示 | TPU 连接可能卡在 `Allocating` | 教师端需要预录结果、截图和 JSON，现场能切换 fallback |
+
+#### 面向学生的建议规模（按免费 Colab 设计）
+
+1. **默认基线：** 把“拿不到 TPU”视为常态之一，而不是异常路径。
+2. **TPU 成功分配时：** 按 `v5e-1` 单芯片设计，优先小模型、LoRA、短训练、固定 shape。
+3. **实验规模建议：** `TRAIN_SAMPLES=20~50`，`EVAL_SAMPLES=10~20`，`NUM_TRAIN_STEPS=10~20`，`MAX_SEQ_LEN<=256`，`LORA_RANK=8`。
+4. **范围控制：** 免费版只做 SFT 展示，**不把 GRPO 作为学生默认现场任务**。
+5. **交付策略：** TPU 路径是“加分项/展示项”，GPU 或预录结果才是课程交付兜底。
+
+#### 本节调研依据
+
+- Colab FAQ（官方）：免费资源不保证、usage limits 动态变化、硬件类型随时间变化、免费运行时上限受 availability 影响。
+- `TPUs in Colab` 官方 notebook：仍显示旧的 TPU v2 / 8-device 示例，说明示例文档与现网硬件可能不同步。
+- `googlecolab/colabtools` issue #5566（官方公告）：免费层从 TPU v2-8 迁移到 TPU v5e-1。
+- `googlecolab/colabtools` issue #5194、#5905 等：开发者实际反馈 TPU 连接失败、卡在分配阶段，反映免费层 TPU 可用性不稳定。
+
 ---
 
 ## 1. 决策摘要
@@ -144,7 +196,7 @@ git clone <repo URL> ~/project
 | 训练框架 | **Tunix (JAX/Flax)** | TPU 原生栈，官方支持 SFT+GRPO+LoRA |
 | GPU vs TPU 对比 | **统一 Tunix/JAX** | 纯硬件对比，控制变量 |
 | 第一版范围 | **SFT only** | 降低首版复杂度，30 分钟约束 |
-| 模型 | `Qwen/Qwen2.5-Coder-1.5B`，fallback `Qwen2.5-1.5B` | Tunix 支持 Qwen2.5 家族 |
+| 模型 | **`Qwen/Qwen2.5-Coder-1.5B`**（魔改 Tunix 支持），fallback `Qwen2.5-1.5B` | 保持与 GPU 实验一致；教学展示 fine-tune 前后差异最大化 |
 | 数据 | `ankner/gsm8k-CoT`，500 训练 / 200 评估 | 满足 30 分钟约束 |
 | LoRA 库 | **qwix** | Tunix 原生 LoRA/QLoRA |
 | 运行环境 | Colab（交付）+ GCP TRC v4（**主力开发**） | 代码完全通用 |
@@ -173,12 +225,49 @@ git clone <repo URL> ~/project
 
 ```
 TPU-project/
-├── tpu_gpu_comparison.py    ← 源文件（唯一编辑的文件，# %% cell 格式）
-├── tpu_gpu_comparison.ipynb ← 生成物（jupytext 转换，不手动编辑）
-├── create_tpu.sh            ← TPU VM 创建脚本
-├── instructor_notes.md      ← 教师讲解 + 报错手册
-├── results_tpu.json / results_gpu.json / comparison.png ← 预录结果
-└── TPUplanning              ← 本文件
+├── tpu_sft_pipeline.py         ← ★ 主脚本：baseline→训练→评估→性能指标（一键运行）
+├── results_tpu.json            ← 主脚本输出（准确率 + 性能 + 逐条结果，每次运行覆盖）
+├── generate_figures.py         ← 可视化脚本：读取 results_tpu.json，生成 7 图 + 4 表
+├── figures/                    ← 所有可视化输出 + 中文说明
+│   ├── 图表说明.md              ← 每张图/表的中文解释 + 建议展示顺序
+│   ├── fig1_accuracy.png       ← 准确率 + McNemar 不一致对
+│   ├── fig2_training.png       ← 训练动态（步耗时 + 吞吐量曲线）
+│   ├── fig3_time_breakdown.png ← 时间拆解（batch=1 vs batch=16）
+│   ├── fig4_hardware.png       ← MFU + TFLOP/s + 配置卡
+│   ├── fig5_data_scaling.png   ← 数据量对比（3000 vs 7465 全量）
+│   ├── fig6_inference_opt.png  ← 推理优化效果（延迟 + pipeline 时间）
+│   ├── fig7_dashboard.png      ← 一页总览仪表盘（6 面板）
+│   ├── table1_results.png      ← 主要实验结果表
+│   ├── table2_performance.png  ← TPU 训练性能表
+│   ├── table3_data_scaling.png ← 数据量对比表（3000 vs 全量）
+│   └── table4_inference_opt.png← 推理优化 + 方案时间估算表
+├── SFT_TRADEOFF_NOTE.md        ← 数据量选择分析（3000 vs 全量，含时间估算）
+├── make_comparison.py          ← GPU vs TPU 对比可视化（Phase 5 用）
+├── test_batch_inference.py     ← batch 推理 benchmark 脚本
+├── setup_tpu_vm.sh             ← ★ 新 VM 一键环境恢复脚本
+├── patch_tunix.sh              ← Tunix monkey-patch 自动应用脚本（4 个 patch）
+├── TPUplanning                 ← 本文件
+├── tunix_qwen2_sharding_bug.md ← Qwen2 + LoRA sharding 问题记录
+├── create_tpu.bat              ← TPU VM 创建脚本（Windows）
+├── prompt                      ← 项目需求原文
+├── google TPU for research start guide ← TRC 邮件（资源配额参考）
+├── archived/                   ← 早期脚本和结果（有参考价值，不再使用）
+│   ├── sft_coder_lora.py       ← Phase 1 SFT 训练脚本
+│   ├── inference_tpu.py        ← Phase 2 推理脚本
+│   ├── perf_eval.py            ← Phase 3 性能评估脚本
+│   ├── baseline_vs_finetuned.py← Phase 2-3 对比脚本
+│   ├── run_sft_coder_lora.sh   ← Tunix CLI 启动脚本
+│   ├── base_config.yaml        ← Tunix CLI 默认配置
+│   ├── eval_results_tpu.json   ← Phase 2 推理结果（10 条）
+│   ├── perf_results_tpu.json   ← Phase 3 性能结果（10 条）
+│   └── baseline_vs_finetuned.json ← Phase 2-3 对比结果（10 条）
+│
+│  ── 以下为 Phase 5 交付物（待创建）──
+├── gpu_sft_pipeline.py        ← GPU 版 pipeline（已创建，待 GPU 环境运行）
+├── tpu_gpu_comparison.py       ← 源文件（最终交付用，# %% cell 格式）
+├── tpu_gpu_comparison.ipynb    ← 生成物（jupytext 转换，不手动编辑）
+├── instructor_notes.md         ← 教师讲解 + 报错手册
+└── results_gpu.json / comparison.png ← GPU 结果 + 对比图
 ```
 
 **核心原则：绝不直接编辑 `.ipynb`。** 编辑 .py → `jupytext --to notebook` → 生成 .ipynb。
@@ -225,25 +314,25 @@ Qwen2.5-1.5B BF16 占用 ~3GB + LoRA ~50MB + activations ≈ 6-8GB，16GB HBM �
 
 ## 3. 需要 PoC 确认的细节
 
-| # | 问题 | 确认方法 | 备选 |
+| # | 问题 | 状态 | 结果 |
 |---|---|---|---|
-| P1 | Tunix 能否加载 Qwen2.5-Coder-1.5B | `from_pretrained` | fallback Qwen2.5-1.5B |
-| P2 | LoRA module_path | 打印模型结构 | `".*"` 全量匹配 |
-| P3 | Tunix data API 格式 | 参考 `tunix.examples.data` | 手写 batch iterator |
-| P4 | PeftTrainer step-level callback | 查 API 源码 | 只记录总时间 |
-| P5 | Tunix tokenizer vs HF tokenizer | 实测 | 分别用 |
-| P6 | Sampler 在 GPU (JAX CUDA) 能否工作 | GPU runtime 实测 | GPU 端跳过推理 |
-| P7 | GPU 上 XLA 编译时间 | 实测 MVP 20 步 | 减 seq_len 到 256 |
+| P1 | Tunix 能否加载 Qwen2.5-Coder-1.5B | ✅ 已确认 | 需魔改加 classmethod（已完成），用 `model_name=qwen2.5-1.5b` + `model_id=Qwen/Qwen2.5-Coder-1.5B` |
+| P2 | LoRA module_path | ✅ 已确认 | `.*attn.*proj\|.*mlp.*(gate\|up\|down)_proj`，28层×7投影=196个，9.2M LoRA 参数 |
+| P3 | Tunix data API 格式 | ✅ 已确认 | 官方用 TFDS（需 TF），我们改用 HF datasets + 手写 batch → `list[TrainingInput]` |
+| P4 | PeftTrainer step-level callback | ✅ 已确认 | `TrainingHooks.on_train_step_end(ctx, step, loss, step_time)` |
+| P5 | Tunix tokenizer vs HF tokenizer | ✅ 已确认 | 直接用 HF `AutoTokenizer`，Tunix tokenizer 仅用于 Gemma/Llama |
+| P6 | Sampler 在 GPU (JAX CUDA) 能否工作 | 待确认 | |
+| P7 | GPU 上 XLA 编译时间 | 待确认 | |
 
 ---
 
 ## 4. 前置检查清单
 
-**环境：** `jax.devices()` 返回 TpuDevice/GpuDevice | JAX >= 0.6.0 | Tunix/qwix 可导入
+**环境：** ✅ `jax.devices()` → 4× TPU v2 | JAX 0.9.1 | Tunix 0.1.6 / qwix 可导入 | Python 3.11
 
-**模型：** AutoModel.from_pretrained 成功 | HBM 占用 < 12GB | trainable_params > 0
+**模型：** ✅ `model_lib.create_model()` 成功 | 1.54B 参数 + 9.2M LoRA | mesh `(2,2)` + `AxisType.Auto`
 
-**数据：** `load_dataset("ankner/gsm8k-CoT")` 成功 | 95% token 长度 < MAX_SEQ_LEN
+**数据：** ✅ `load_dataset("ankner/gsm8k-CoT")` 成功 | 10 条样本 tokenize OK
 
 ---
 
@@ -253,17 +342,267 @@ Qwen2.5-1.5B BF16 占用 ~3GB + LoRA ~50MB + activations ≈ 6-8GB，16GB HBM �
 - 三环境安装 Tunix，运行检查清单 §4
 - **产出：** 环境兼容性矩阵
 
-### Phase 1：模型 + 数据 PoC（Day 1 下午 - Day 2 上午，~4h）
-- 加载模型（P1）→ 打印结构确认 LoRA path（P2）→ 数据转换（P3）→ 10 step 训练
-- **产出：** 模型加载日志 + 数据样例 + 10 step loss
+### Phase 1：模型 + 数据 + 训练 PoC — ✅ 完成
+- ✅ 加载模型（P1）→ ✅ 打印结构确认 LoRA path（P2）→ ✅ 数据转换（P3）
+- ✅ 训练跑通：10 条数据, 3 步, loss 5.1→4.38→3.94, 稳态 8.2 steps/sec
+- **关键解法：** `AxisType.Auto` mesh + monkey-patch `_shard_optimizer`
+- **产出：** `sft_coder_lora.py`
 
-### Phase 2：完整 SFT 闭环（Day 2 下午 - Day 3 上午，~6h）
-- LoRA + 200 step 训练 → checkpoint → 推理评估
-- **产出：** 训练日志 + checkpoint + evaluation_results.json
+### Phase 2：小样本全流程闭环 — ✅ 完成
+10 条训练 / 10 条评估，训练→推理→评估 完整链路跑通。
 
-### Phase 3：GPU 对比 + 可视化（Day 3 下午，~4h）
+- ✅ **2a: 推理** — Tunix `Sampler` + dtype cast 修复 (LoRA float32 vs cache bfloat16)
+- ✅ **2b: 评估** — 复用 `answer_utils.py`，提取答案并计算准确率
+- ✅ **2c: 端到端验证** — 3 步训练, loss 5.1→3.94, 推理 80% 准确率 (8/10)
+
+**新发现的 bug：**
+1. LoRA `v_proj` 输出 float32 vs KV cache bfloat16 → `dynamic_update_slice` dtype 不匹配
+   - 修复：在 `qwen2/model.py` 的 `block()` 中加 `.astype(cache['v'].dtype)`
+2. `Sampler.dtype` 取第一个参数的 dtype，LoRA 后可能取到 float32
+   - 修复：override `Sampler.dtype` property 为 `jnp.bfloat16`
+
+**产出：** `inference_tpu.py` + `eval_results_tpu.json`
+
+### Phase 3：性能评估（Performance Eval）— ✅ 完成
+
+#### 当前范围说明
+
+**我们只做了 SFT（LoRA）。** GRPO 未包含。
+GRPO 需要每步 rollout（生成多条回答）+ 奖励计算 + 多次 forward/backward，
+比 SFT 慢 5-10 倍。如果要做 GRPO，需要额外的 Phase。
+
+#### 实测数据
+
+**Phase 3 初始测试（10 条训练 + 10 条评估）：**
+
+| 阶段 | 耗时 | 说明 |
+|---|---|---|
+| 模型加载 + LoRA | 16.8s | HF 下载 + safetensors → JAX + LoRA 注入 |
+| 首次训练 step | **146.7s** | 含 JIT 编译（XLA 整图编译） |
+| 稳态训练 step | **0.125s** | 8 steps/sec → **1173x 加速** |
+| 首次推理 sample | **50.0s** | Sampler JIT 编译 |
+| 稳态推理 sample | **0.9s** | 加了 max_prompt_length PAD 后 |
+| 端到端 wall time | **224.5s** | 含所有编译 |
+
+**Phase 4 全量测试（7465 条训练 + 1316 条评估）：**
+
+| 阶段 | 耗时 | 说明 |
+|---|---|---|
+| 模型加载 + LoRA | 16.4s | |
+| JIT 编译开销 | **173s** | 训练首步编译 |
+| 稳态训练 step | **0.084s** | 11.9 steps/sec, batch=4, seq_len=512 |
+| 训练吞吐 | **24,314 tok/s** | |
+| MFU | **83.4%** | 4N formula, peak=45 TFLOP/s/chip |
+| 推理（batch=16 稳态） | **0.358s/sample** | 较 batch=1 的 0.7s 加速 2x |
+| Baseline 准确率 | **57.8%** (761/1316) | |
+| Fine-tuned 准确率 | **66.0%** (868/1316) | |
+| 提升 | **+8.1%** | McNemar p < 0.0001，高度显著 |
+| 端到端 wall time | **~24 min**（est.） | batch=16 推理优化后 |
+
+#### PAD 修复推理重编译问题
+
+**问题：** 不同 prompt 长度导致 XLA 重编译（每次 ~50s）
+**原因：** XLA 编译出的程序是固定 shape 的，shape 一变就重编译
+**修复：** `sampler(max_prompt_length=128)` 将所有 prompt pad 到同一长度
+
+| 指标 | 修复前（无 PAD） | 修复后（有 PAD） |
+|---|---|---|
+| 推理稳态平均 | 11.9s | **0.9s**（13x 加速） |
+| 10 条推理总时间 | 159s | **57s**（2.8x 加速） |
+
+PAD 操作发生在 tokenizer 之后、模型 forward 之前：
+token 序列不足 128 时用 0 补齐，attention mask 告诉模型忽略补位。
+
+#### MFU 和 TFLOP/s
+
+| 指标 | Phase 3 原始值 | Phase 4 修正值 | 说明 |
+|---|---|---|---|
+| Peak (TPU v2) | 22.5 TFLOP/s/chip | **45 TFLOP/s/chip** | 22.5 是每 MXU，每 chip 2 个 MXU |
+| FLOPs 公式 | 6N (全参训练) | **4N (LoRA)** | 冻结参数无梯度累加 |
+| TFLOP/s/device | 18.97 | **37.53** | |
+| MFU | 84.3% | **83.4%** | 两个错误近似抵消，修正后值接近 |
+
+MFU = Model FLOPs Utilization = 实际算力 ÷ 硬件峰值
+83.4% 意味着 TPU 矩阵乘法单元（MXU）被高效利用。
+
+#### 性能指标体系
+
+**第一层：通用指标（CPU/GPU/TPU 都能算，教学核心）**
+
+| 指标 | 公式 | 怎么算 | 教学意义 |
+|---|---|---|---|
+| **Wall Clock Time** | `time.time()` 差值 | Python 标准库 | 最直观：用户实际等了多久 |
+| **Throughput (tokens/sec)** | `batch_size × seq_len / step_time` | 训练 step 计时 | 训练效率核心指标 |
+| **First Step Time** | 第 1 步耗时 | 计时器 | **TPU/GPU 最大差异点**：JIT 编译开销 |
+| **Steady State Step Time** | 第 2+ 步平均耗时 | 计时器 | 稳态性能，TPU 通常更快 |
+| **Inference Latency** | 每条推理耗时 | `time.time()` | 端到端用户体验 |
+| **Accuracy (pre/post)** | 正确数 / 总数 | `answer_utils.py` | fine-tune 效果验证 |
+
+这些指标**完全不需要额外库**，用 `time.time()` 和 Python 算术即可。
+在 CPU/GPU/TPU 上写法完全一样，方便横向对比。
+
+**第二层：硬件效率指标（进阶，需要理论峰值）**
+
+| 指标 | 公式 | 教学意义 |
+|---|---|---|
+| **TFLOP/s/device** | `model_flops_per_step / step_time / num_devices / 1e12` | 实际算力 |
+| **MFU (Model FLOPs Utilization)** | `TFLOP/s/device / peak_TFLOP/s` | **核心效率指标**：硬件被利用了多少 |
+| **HBM Bandwidth Utilization** | profile 工具测量 | 是否瓶颈在内存带宽 |
+
+MFU 的含义：
+- 如果一块 TPU v2 chip 峰值 45 TFLOP/s，你的训练跑出 37.5 TFLOP/s，则 MFU = 83%
+- 典型值：小模型 LoRA fine-tuning 约 10-25%，大规模预训练可达 50-60%
+- **我们实测 83.4%** 是非常高的值，因为 1.5B 模型的矩阵维度刚好适合 TPU MXU
+- **教学价值**：解释为什么 MFU < 100%（内存搬运、通信、padding、非矩阵运算）
+
+model_flops 计算（Transformer 近似公式，来自 PaLM 论文）：
+```
+flops_per_token ≈ 2 × num_params  (forward only)
+全参训练:       ≈ 6 × num_params  (forward + backward + gradient)
+LoRA 训练:      ≈ 4 × num_params  (forward + backward, 冻结参数无梯度累加)
+flops_per_step = flops_per_token × batch_size × seq_len
+```
+我们的模型（LoRA）：`4 × 1.54B × 4 × 512 ≈ 12.6 TFLOP/step`
+
+**第三层：TPU 独有指标（高阶，需 profiler）**
+
+| 指标 | 工具 | 说明 |
+|---|---|---|
+| **MXU Utilization %** | `jax.profiler` + TensorBoard | MXU（128×128 矩阵乘法单元）的占用率 |
+| **XLA HLO Compilation Time** | `jax.profiler.trace()` | JIT 第一步的 XLA 编译耗时 |
+| **ICI Bandwidth Utilization** | TensorBoard op_profile | 芯片间互连带宽使用率 |
+| **Memory Timeline** | `jax.profiler` memory_viewer | HBM 使用变化，peak memory |
+
+收集方式：
+```python
+# 方式 1: jax.profiler.trace (生成 Perfetto 可视化)
+with jax.profiler.trace("/tmp/jax-trace"):
+    trainer.train(batches, None)
+
+# 方式 2: start/stop (更灵活)
+jax.profiler.start_trace("/tmp/profile")
+# ... training steps ...
+jax.profiler.stop_trace()
+# 然后用 TensorBoard 打开: tensorboard --logdir /tmp/profile
+```
+
+#### 教学展示策略：用什么指标讲什么故事
+
+| 要讲的故事 | 用什么指标 | 预期结果 |
+|---|---|---|
+| "TPU 第一步很慢" | First Step Time vs Steady State | TPU: 147s→0.12s (1200x); GPU: 5s→0.5s (10x) |
+| "TPU 稳态更快" | Steady State Throughput | TPU > GPU (矩阵乘法优势) |
+| "TPU 成本效率高" | Tokens/sec/dollar | TPU 通常 15-25% 更优 |
+| "硬件利用率" | MFU | 解释为什么都达不到 100% |
+| "XLA 编译的代价" | Compilation Time | TPU 必须 JIT，GPU 可 eager |
+
+#### 硬件峰值参考
+
+| 硬件 | Peak bfloat16 TFLOP/s (per chip) | 芯片数 | 总 TFLOP/s |
+|---|---|---|---|
+| **TPU v2** (我们) | 45 (2 MXU × 22.5) | 4 | 180 |
+| **TPU v4** | 275 | 4 | 1100 |
+| **TPU v5e** (Colab) | ~197 | 1 | 197 |
+| **GPU T4** (Colab) | ~65 | 1 | 65 |
+| **GPU A100** | ~312 | 1 | 312 |
+
+#### 参考：同学的可视化方案
+
+三张 matplotlib 折线图（cpu / cuda / xla 三条线，x 轴 batch size 对数轴）：
+1. **First Step Overhead (compile proxy)** — 编译开销随 batch size 的缩放
+2. **Total Compute Time** — 纯计算时间
+3. **Total Wall Time** — 墙钟总时间
+
+加一张 Perfetto timeline（`jax.profiler.trace()` 生成），展示 XLA 编译事件。
+
+**关键教学发现：**
+- 小 batch：TPU 被编译拖累，总时间反而最慢
+- 大 batch：TPU 计算优势显现，总时间最快
+- **交叉点**就是最好的教学讨论素材
+
+#### 实施计划
+
+**perf_eval.py** — 独立性能评估脚本，收集所有指标：
+
+```
+输入: 训练好的模型（或直接内嵌训练）
+输出: perf_results_{device}.json + 可选 profiler trace
+
+收集内容:
+1. training_first_step_sec     — 第一步耗时（含 JIT 编译）
+2. training_steady_step_sec    — 稳态平均 step 时间
+3. compilation_overhead_sec    — first - steady
+4. throughput_tokens_per_sec   — bs × seq_len / step_time
+5. model_tflops_per_sec        — 6 × 1.54e9 × bs × seq_len / step_time / num_devices / 1e12
+6. mfu_percent                 — tflops / peak_tflops × 100
+7. inference_first_sample_sec  — 首条推理（含编译）
+8. inference_steady_sample_sec — 稳态推理
+9. total_wall_time_sec         — 端到端
+10. accuracy_pre_finetune      — baseline
+11. accuracy_post_finetune     — fine-tuned
+```
+
+GPU 端同样逻辑输出 `perf_results_gpu.json`，最后用 matplotlib 画对比图。
+
+### Phase 4：扩大数据量 + baseline 对比 + 推理优化 — ✅ 完成
+
+#### 4a: 预扩大检查与修复
+扩大数据前系统性排查了 5 个问题并逐一修复：
+1. **训练计时**：从硬编码 step time 改为 `TimingHooks`（callback 收集每步耗时/loss）
+2. **训练步数**：`TRAIN_STEPS=None` 自动计算 1 epoch
+3. **序列长度**：`MAX_SEQ_LEN` 从 256→512（原 256 仅覆盖 43.8%，P95=353, P99=403, 512=100%）
+4. **评估时间预算**：确认 1316 条可在合理时间内完成
+5. **内存**：~7.4 GB on 32GB HBM，安全
+
+#### 4b: MFU 计算修正
+Phase 3 的 MFU 84.3% 基于两个错误值（恰好近似抵消），现已修正：
+- TPU v2 peak：22.5 → **45 TFLOP/s/chip**（22.5 是每 MXU，每 chip 有 2 个 MXU）
+- FLOPs 公式：6N → **4N per token**（LoRA 冻结参数不计算梯度累加，只有 forward 2N + backward 2N）
+- 修正后 MFU = **83.4%**（与旧值接近是巧合）
+
+#### 4c: 3000 条训练试跑
+- 训练 3000 条 / 评估 200 条
+- Baseline 61.5% → Fine-tuned 67.5%，**+6.0%**
+- McNemar p=0.105，**统计不显著**（200 条评估检验力不足）
+- MFU 83%，稳态 0.083s/step，12 steps/sec
+
+#### 4d: 全量训练
+- 训练 7465 条 / 评估 1316 条（完整 GSM8K-CoT）
+- Baseline 57.8% → Fine-tuned 66.0%，**+8.1%**
+- McNemar χ²=30.78，**p < 0.0001，高度显著**
+- 不一致对：baseline-only=129，finetuned-only=236（净修复 107 题）
+- MFU 83.4%，稳态 0.084s/step，24,314 tok/s
+- 总耗时 41 min（推理占 76%）
+
+#### 4e: 推理 batch 优化
+- 发现推理占总时间 76%，原因是逐条推理（batch=1）严重浪费 TPU 算力
+- Sampler 原生支持 batch 推理：`input_strings` 传列表即可
+- 改为 `EVAL_BATCH_SIZE=16`，最后一个 batch padding 到固定大小避免 JIT 重编译
+- **实测**：稳态 0.358s/sample（batch=1 为 0.7s），**2x 加速**
+- 全量 pipeline 预估从 41 min 降至 **~24 min**
+- 加速不到 16x 的原因：decode 阶段是 memory-bandwidth bound，batch 增大加重 KV cache HBM 读取
+
+**产出：**
+- `results_tpu.json`（准确率 + 性能 + 逐条推理结果 + 统计检验）
+- `SFT_TRADEOFF_NOTE.md`（3000 条 vs 全量数据选择分析，含时间估算）
+- `test_batch_inference.py`（batch 推理 benchmark 脚本）
+
+#### 4f: 可视化图表生成
+为 demo 展示生成了完整的可视化材料，全部输出到 `figures/` 文件夹：
+- **7 张图**: 准确率(fig1)、训练动态(fig2)、时间拆解(fig3)、硬件利用率(fig4)、数据量对比(fig5)、推理优化(fig6)、一页总览仪表盘(fig7)
+- **4 张表格**: 实验结果(table1)、TPU 性能(table2)、数据量对比(table3)、推理优化+方案估算(table4)
+- **中文说明**: `figures/图表说明.md`，包含每张图表的详细解释和建议展示顺序
+- 所有标签使用英文（TPU VM 无中文字体），说明文档使用中文
+- 脚本 `generate_figures.py` 可一键重新生成所有图表
+
+**GC 周期分析**: fig2 中发现每 ~336 步（~28 秒）出现一次 ~500ms 毛刺（正常 84ms 的 6-7x），
+交替间隔 313/360 步，原因是 Python GC（垃圾回收）周期性触发，正常现象不影响训练
+
+### Phase 5：GPU 对比 + 可视化 — 待开始
 - 切 GPU runtime，同一代码运行 → 生成对比图表
-- **产出：** results_gpu.json + results_tpu.json + comparison.png
+- `gpu_sft_pipeline.py` 已创建（TPU pipeline 的 GPU 适配版）
+- `make_comparison.py` 已创建（读取两个 JSON 生成对比图 + ASCII 表）
+- **产出：** results_gpu.json + comparison.png
 
 ---
 
@@ -276,6 +615,8 @@ Qwen2.5-1.5B BF16 占用 ~3GB + LoRA ~50MB + activations ≈ 6-8GB，16GB HBM �
 | GPU T4 | Colab | 16 GB | ~65 TFLOPS |
 | TPU v5e-1 | Colab | 16 GB | ~197 TFLOPS |
 
+> 注：按 Colab 官方 2025-08 公告，免费层 TPU 已从 v2-8 迁移到 v5e-1；但**是否能分配到 TPU、连续可用多久，都不保证**。
+
 Batch size 维度：bs=1/ga=8, bs=2/ga=4, bs=4/ga=2（有效 batch 均为 8）
 
 ### 指标
@@ -287,6 +628,157 @@ first_step_time / steady_state_step_time / total_wall_time / throughput_tokens_p
 1. 训练时间 + Step Time + 准确率 bar chart（三图并排）
 2. Step Time 曲线（GPU vs TPU，重点看第一步 spike）
 3. （选做）Batch Size vs Throughput
+
+### SFT 数据量 vs 教学体量：取舍标准先怎么想
+
+这里先**不急着定具体数字**，先定判断框架。
+
+#### 先明确：教学项目的目标不是“把 SFT 效果做到最好”
+
+教学项目通常同时追求 4 件事：
+
+1. **效果可见**：学生能明显看到 fine-tune 前后差异。
+2. **时长可控**：单次实验最好 10-30 分钟内闭环。
+3. **成功率高**：大多数学生在共享算力环境里能跑通。
+4. **概念清晰**：学生能看懂“为什么有效”，而不是只看到一堆 loss 数字。
+
+所以这里的核心不是“数据越大越好”，而是：
+
+**在最小可接受训练成本下，拿到足够清晰、可复现、可讲解的效果。**
+
+#### 主流教程的共同策略：不是盲目加数据，而是优先提高“每个 token 的教学价值”
+
+我查了 Hugging Face TRL / LLM Course、Transformers、PEFT、Unsloth、Axolotl 这一类主流 SFT 教程与配置文档，虽然它们的框架不同，但处理这个问题时的共同策略高度一致。
+
+**共识 1：先用 PEFT/LoRA，把“能不能跑”解决掉，而不是先追求全参最优。**
+
+- Hugging Face TRL、PEFT、Unsloth、Axolotl 都默认把 LoRA / QLoRA 作为低资源 SFT 的主路径。
+- 这背后的共识很简单：**算力有限时，先降低训练成本，再讨论数据规模。**
+- 换句话说，如果 LoRA 路径都跑不顺，全参 fine-tune 基本只会更糟。
+
+**共识 2：教程示例经常用“小而干净”的子集启动，而不是一上来全量数据。**
+
+- TRL 文档直接给过 `train[:1%]` 这种子集示例。
+- 很多教程用 compact dataset 或者只跑 `max_steps` 的 quick start，而不是默认全量 epoch。
+- 这说明教程设计默认接受一个现实：**首轮目标是建立可运行闭环，不是一次训练到最好。**
+
+**共识 3：高质量、强针对性数据，往往比“机械扩量”更重要。**
+
+- Hugging Face LLM Course 强调 dataset quality is crucial。
+- Unsloth 明确强调：不要只是把文档“整包倒进去”，要优先整理成高质量 QA / instruction-response 对。
+- 对教学项目尤其成立，因为你不是追求 leaderboard，而是追求**可解释的能力变化**。
+
+**共识 4：先压序列长度和无效 token，而不是先砍任务本身。**
+
+- TRL 的 memory guide 强调：`max_length` 过大浪费显存和计算；packing 能显著减少 padding；padding-free / packing / truncation 都是在提高 token 利用率。
+- TRL、Axolotl、Unsloth 都支持或强调：
+    - 合理设置 `max_length`
+    - packing / sample packing
+    - completion-only / assistant-only loss
+- 共同思路是：**先减少“无价值 token”的训练开销，再决定要不要增加样本数。**
+
+**共识 5：控制训练步数通常比“固定跑很多 epoch”更适合教程。**
+
+- Hugging Face LLM Course、TRL、Axolotl、Unsloth 都把 `max_steps` 作为重要控制项。
+- 教程环境里更常见的做法是：
+    - 先设较小 `max_steps`
+    - 观察 loss / eval / 样例输出
+    - 再决定是否延长
+- 这是因为教学里最怕两种事：
+    - 训练过短，完全没变化
+    - 训练过长，学生等太久还过拟合
+
+**共识 6：1-3 epoch 是常见上限，不鼓励长时间硬训。**
+
+- Hugging Face LLM Course 建议 start with conservative values，1-3 epochs。
+- Unsloth 也给出 1-3 epochs 的经验区间，并明确说更多 epoch 往往收益递减、过拟合风险上升。
+- 对小型教学数据集来说，这一点更重要：**小数据 + 多 epoch 很容易变成记忆训练集。**
+
+**共识 7：小数据集时，必须把评估和早停意识放进设计里。**
+
+- Hugging Face LLM Course 明确把 validation loss、qualitative outputs、overfitting signs 当核心监控项。
+- Unsloth 也建议：eval loss 上升就停，必要时减 epoch、降 LR、加正则。
+- 这意味着：**当你不能无限加数据时，就更应该把“何时停”作为主要设计变量。**
+
+**共识 8：教学/demo 往往靠“分层目标”解决矛盾，而不是单次 run 同时满足所有目标。**
+
+- 常见做法是把实验拆成：
+    - 快速 demo run：很小的数据，很短的步数，保证所有人能跑通
+    - 标准 run：中等数据量，效果更明显，供助教/教师演示
+    - full run：离线预录或课后选做
+- 这其实是最现实的教学工程策略。
+
+#### 因此，这个问题的取舍标准建议按下面 4 个维度排序
+
+先排优先级，再定数字：
+
+1. **闭环优先**：是否能在课堂时间内完成“训练→推理→评估→对比展示”。
+2. **信号优先**：训练后的变化是否足够明显，哪怕不是最优分数。
+3. **成功率优先**：是否适配 Colab 免费版 / 学生机器 / 共享资源波动。
+4. **最优效果最后**：只有在前 3 条都满足后，才考虑继续加数据。
+
+如果某个设置能把准确率多提高 3-5 个点，但把训练时间从 12 分钟拉到 45 分钟，那对教学项目通常不是好交易。
+
+#### 更实用的判断问题，不是“要不要加数据”，而是这 5 个问题
+
+1. **当前瓶颈到底是数据不够，还是 token 利用率太差？**
+2. **当前任务要展示的是“格式/行为变化”还是“知识/推理能力提升”？**
+3. **我们需要的是“每个学生都能跑通”，还是“教师演示效果最好”？**
+4. **当前收益更适合通过“多样性更高的数据”获得，还是通过“更长训练”获得？**
+5. **有没有必要把一个目标拆成两档实验，而不是逼一个 notebook 同时兼顾全部目标？**
+
+#### 面向本项目，主流教程启发出的常见解法
+
+**方案 A：小而精的数据 + completion-only / assistant-only loss**
+
+- 不急着扩大量，先提高 supervised token 的密度。
+- 适合：我们这种 prompt 较长、目标输出明确的 instruction / CoT 场景。
+- 价值：同样的 wall time，真正用于学答案格式和推理轨迹的 token 更多。
+
+**方案 B：保留小样本课堂版，同时准备中样本教师版**
+
+- 学生版：保证 10-20 分钟内闭环。
+- 教师版：拉大数据量，拿更明显效果，用于演示或预录。
+- 这是大多数教程背后的默认工程逻辑，只是它们不一定明说。
+
+**方案 C：固定 `max_steps`，而不是让 epoch 决定时长**
+
+- 在共享算力环境里，`max_steps` 更适合把时间预算锁死。
+- 对小数据集来说，配合 eval 观察比死跑多个 epoch 更稳。
+
+**方案 D：先优化 token 效率，再考虑扩样本**
+
+- 先做：序列长度裁剪、packing、mask prompt token、降低 padding。
+- 再做：增加训练样本。
+- 因为前者通常是“白捡效率”，后者是真正增加成本。
+
+**方案 E：把“效果”定义为可见增益，不定义为 benchmark 最优**
+
+- 对教学来说，只要 baseline 和 SFT 后在代表性样例上差异明显，且评估指标有稳定提升，就已经足够。
+- 不需要把数据量拉到研究项目规模。
+
+#### 目前可以先不定的东西
+
+暂时不需要现在就拍板：
+
+- 训练样本到底是 20 / 50 / 200 / 500
+- 到底跑 10 步还是 50 步
+- 学生版是否一定要现场训练，而不是部分读取预录结果
+
+但建议尽快定的是：
+
+1. **课堂版本的首要目标是什么**：跑通、效果、还是对比图？
+2. **兜底路径是什么**：GPU fallback 还是预录结果？
+3. **我们接受的最小时效提升标准是什么**：例如“至少能在若干代表样例上看出行为改善”。
+
+#### 本节调研归纳来源
+
+- Hugging Face TRL: `SFTTrainer`, `Reducing Memory Usage`
+- Hugging Face LLM Course: `Supervised Fine-Tuning`
+- Hugging Face Transformers: `Fine-tuning`
+- Hugging Face PEFT: `LoRA`
+- Unsloth: `Fine-tuning LLMs Guide`, `LoRA Hyperparameters Guide`
+- Axolotl: dataset/config docs（尤其是 `max_steps`, `sequence_len`, packing, masking 相关配置）
 
 ---
 
@@ -302,16 +794,20 @@ first_step_time / steady_state_step_time / total_wall_time / throughput_tokens_p
 
 ## 8. 风险 Top 8
 
-| 风险 | 概率 | 兜底 |
-|---|---|---|
-| Qwen2.5-Coder 不被 Tunix 识别 | 中 | fallback Qwen2.5-1.5B |
-| LoRA module_path 不匹配 | 中 | `".*"` 全量 |
-| GPU XLA 编译极慢 (>10min) | 中高 | 减 seq_len；作教学讨论 |
-| Tunix data API 不兼容 | 中 | 手写 batch iterator |
-| Colab TPU 配额用完 | 中 | 用 TRC v4 或预录结果 |
-| Sampler 在 GPU 不工作 | 低 | 跳过推理 |
-| JAX/Tunix 版本冲突 | 低 | 固定版本 |
-| TPU 完全不可用 | 低 | 真实 GPU + 预录 TPU |
+| 风险 | 概率 | 状态 | 处理 |
+|---|---|---|---|
+| Qwen2.5-Coder 不被 Tunix 识别 | 中 | ✅ 已触发并解决 | 魔改加 classmethod，架构与基座完全一致 |
+| LoRA module_path 不匹配 | 中 | ✅ 已确认 OK | `.*attn.*proj\|.*mlp.*(gate\|up\|down)_proj` |
+| Qwen2 3D weight + LoRA 2D sharding 不匹配 | **新发现** | ✅ 已解决 | monkey-patch `_shard_optimizer` 为空操作，JIT 自动分片，见 `tunix_qwen2_sharding_bug.md` |
+| AxisType.Explicit 导致 embedding gather 失败 | **新发现** | ✅ 已解决 | mesh 必须用 `AxisType.Auto` |
+| Tunix data API 依赖 TF | 中 | ✅ 已绕过 | 改用 HF datasets + 手写 batch |
+| GPU XLA 编译极慢 (>10min) | 中高 | 待确认 | 减 seq_len；作教学讨论 |
+| Colab TPU 配额用完 | 中 | 待确认 | 用 TRC v4 或预录结果 |
+| Sampler 在 GPU 不工作 | 低 | 待确认 | 跳过推理 |
+| JAX/Tunix 版本冲突 | 低 | ✅ 无冲突 | JAX 0.9.1 + Tunix 0.1.6 |
+| `base_config.yaml` 未打包进 whl | **新发现** | ✅ 已解决 | 从 GitHub 下载并复制到 CLI 目录 |
+| LoRA float32 vs cache bfloat16 dtype 不匹配 | **新发现** | ✅ 已解决 | `qwen2/model.py` 加 `.astype(cache['v'].dtype)` + override `Sampler.dtype` |
+| 推理不同 prompt 长度触发 XLA 重编译 | **新发现** | ✅ 已解决 | `sampler(max_prompt_length=128)` 统一 pad 长度 |
 
 ---
 
@@ -351,13 +847,141 @@ MAX_SEQ_LEN, LORA_RANK = 256, 8
 
 Checklist: 安装无报错 / 模型加载 / trainable_params > 0 / 20 步完成 / accuracy 有数字 / JSON 保存
 
+**如果按 Colab 免费版保守设计，再降一档更稳：**
+
+```python
+FREE_COLAB_SAFE_MODE = True
+TRAIN_SAMPLES, EVAL_SAMPLES, NUM_TRAIN_STEPS = 20, 10, 10
+MAX_SEQ_LEN, LORA_RANK = 256, 8
+```
+
+用途：给学生现场跑通全流程，优先保证“能连上后 10-15 分钟内出结果”，而不是追求最强训练效果。
+
 ---
 
-## 12. 开发到交付的方案总览
+## 12. 模型选择分析：Coder vs Math vs 基座
+
+### 教学展示目标：fine-tune 前后差异最大化
+
+我们追求的**不是数学 benchmark 刷最高分**，而是 fine-tune 前后有显著变化方便教学展示。
+
+| 模型 | GSM8K 基线 | fine-tune 后预期 | 提升空间 | 教学效果 |
+|---|---|---|---|---|
+| **Qwen2.5-1.5B**（基座） | ~58% | ~70-75% | **大** | ✅ 好 |
+| **Qwen2.5-Math-1.5B** | ~80-84% | ~85-88% | 小 | ❌ 差（已经很高了） |
+| **Qwen2.5-Coder-1.5B** | ~58% | ~70-75% | **大** | ✅ 好（且和 GPU 实验一致） |
+
+### 决策：优先 Coder，fallback 基座
+
+1. **Coder 和基座都有大提升空间**（~58% → ~70%+），教学效果好
+2. **Coder 与 GPU 实验保持一致**，方便对比
+3. **Math 不适合**：起点已经 80%+，fine-tune 后提升很小，看不出效果
+
+### 魔改 Tunix 支持 Coder（已完成）
+
+Tunix 不原生支持 Coder，但架构与基座**完全一致**（28层, 1536d, 12h, rope_theta=1M）。
+在 `tunix/models/qwen2/model.py` 的 `ModelConfig` 类中添加一个 classmethod 即可。
+实际使用时用 `model_name="qwen2.5-1.5b"` + `model_id="Qwen/Qwen2.5-Coder-1.5B"` 加载 Coder 权重。
+
+**Tunix 组件是否关心模型名：** 全部不关心。
+LoRA (qwix) 只看模型对象用 regex 匹配 module path；PeftTrainer 接收任意 NNX 模型；
+Sampler 接收 transformer + tokenizer；Sharding 由 mesh 参数配置。
+**魔改只影响"能不能加载"，不影响"加载出来是什么"。**
+
+---
+
+## 13. 实测环境快照（2026-03-19 更新）
+
+| 项 | 值 |
+|---|---|
+| TPU | v2-8 (4 chips, 128GB total HBM) |
+| Python | 3.11 (`~/tpu-env-311`) |
+| JAX | 0.9.1 |
+| jaxlib | 0.9.1 |
+| Tunix | 0.1.6 (google-tunix) |
+| Flax | 0.12.5 |
+| Optax | 0.2.6 |
+| Transformers | 4.57.1 |
+| Datasets | 4.8.2 |
+| Matplotlib | 3.10.8 |
+| 模型权重缓存 | `~/models/qwen2.5-coder-1.5b` (~2.9GB, 9 files) |
+| 项目代码 | `~/project` (git: `origin https://github.com/seriserendipia/COT-SFT-LLM-MATH.git`) |
+| HF Token | 硬编码在 `tpu_sft_pipeline.py` 和 `test_batch_inference.py` 中 |
+| base_config.yaml | 已从 GitHub 下载到 Tunix CLI 目录 |
+
+### VM 迁移 / 重建指南
+
+**代码（git 管理，push 后新 VM 直接 clone）：**
+- `TPU-project/` 下所有 `.py`、`.sh`、`.md`、`.json` 文件
+- `figures/` 下所有 PNG + 说明文档
+- `archived/` 下的历史脚本和结果
+- `answer_utils.py`（项目根目录，评估用）
+
+**模型权重（~2.9GB，不进 git，需重新下载）：**
+- `~/models/qwen2.5-coder-1.5b`（HuggingFace 自动下载，setup 脚本会处理）
+
+**Python 虚拟环境（~2.3GB，不进 git，需重建）：**
+- `~/tpu-env-311`（setup 脚本会重建）
+
+**Tunix 4 个 monkey-patch（每次 pip install 后需重新应用）：**
+
+| Patch | 文件 | 问题 | 修复 |
+|---|---|---|---|
+| 1. Coder classmethod | `tunix/models/qwen2/model.py` | Tunix 不识别 Coder 变体 | 添加 `qwen2p5_coder_1p5b` classmethod |
+| 2. dtype cast | `tunix/models/qwen2/model.py` | LoRA float32 vs cache bfloat16 | `value_proj.astype(cache['v'].dtype)` |
+| 3. shard_optimizer | `tunix/sft/peft_trainer.py` | Qwen2 3D weights vs LoRA 2D specs | `_fix_sharding` 截断 PartitionSpec rank |
+| 4. base_config.yaml | `tunix/cli/` | pip 安装时可能缺失 | 从 `archived/` 复制 |
+
+**一键恢复流程：**
+```bash
+# 1. 创建新 TPU VM
+create_tpu.bat
+
+# 2. SSH 进去后
+git clone https://github.com/seriserendipia/COT-SFT-LLM-MATH.git ~/project
+cd ~/project && bash TPU-project/setup_tpu_vm.sh
+
+# 3. 每次 SSH 登录
+source ~/tpu-env-311/bin/activate
+
+# 4. 运行实验
+python3 TPU-project/tpu_sft_pipeline.py
+
+# 5. 生成图表
+python3 TPU-project/generate_figures.py
+```
+
+**脚本说明：**
+- `setup_tpu_vm.sh`：一键安装系统依赖 + venv + pip 包 + Tunix patches + 模型下载 + 验证
+- `patch_tunix.sh`：单独应用 4 个 Tunix patch（幂等，已 patch 的会跳过）
+
+### Tunix 支持的 Qwen 模型
+
+| 系列 | 可用配置 |
+|---|---|
+| Qwen2.5 | `qwen2p5_0p5b`, `qwen2p5_1p5b`, `qwen2p5_math_1p5b`, `qwen2p5_3b`, `qwen2p5_7b` |
+| Qwen3 | `qwen3_0p6b`, `qwen3_1p7b`, `qwen3_4b`, `qwen3_8b`, `qwen3_14b`, `qwen3_30b_a3b`, `qwen3_32b` |
+
+### 已验证模型结构（Qwen2.5-Coder-1.5B）
+
+```
+embedder.input_embedding: (151936, 1536) bfloat16
+layers.{0-27}.attn.{q,k,v}_proj.w / {q,k,v}_bias    ← attention
+layers.{0-27}.attn.o_proj.w                           ← output projection
+layers.{0-27}.mlp.{gate,up,down}_proj.kernel           ← MLP
+layers.{0-27}.{input,post_attention}_layernorm.w        ← normalization
+final_norm.w: (1536,)
+总参数量: 1,543,714,304 (1.54B)
+LoRA 参数: 9,232,384 (rank=8, alpha=16)
+```
+
+---
+
+## 14. 开发到交付的方案总览
 
 | | TRC SSH（主力开发） | Colab 扩展（验证） | GitHub CI + Badge（交付） |
 |---|---|---|---|
-| TPU | TRC v4 (32GB) | Colab v5e (16GB) | 学生选 |
-| 稳定性 | on-demand，不被抢占 | 共享池，可能断 | - |
+| TPU | TRC v4 (32GB) | Colab 免费版通常为 v5e-1 (16GB) | 学生选 |
+| 稳定性 | on-demand，不被抢占 | 共享池，可能断，可能拿不到 TPU | - |
 | 时间限制 | 无 | 12h/session | - |
 | 适用阶段 | Day 1-3 开发 | Day 4 验证 | 交付 |
